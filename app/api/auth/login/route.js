@@ -39,7 +39,7 @@ export async function POST(request) {
 
     response.cookies.set('dann_session', sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: true,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30,
       path: '/',
