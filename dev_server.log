@@ -1,0 +1,13 @@
+
+> my-project@0.1.0 dev /app
+> next dev
+
+▲ Next.js 16.3.3 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.2:3000
+✓ Ready in 559ms
+✓ Running next.config.mjs took 26ms
+
+ HEAD / 200 in 3.4s (next.js: 3.0s, application-code: 341ms)
+ GET /docs 200 in 1090ms (next.js: 909ms, application-code: 181ms)
+ GET /login 200 in 871ms (next.js: 643ms, application-code: 229ms)
