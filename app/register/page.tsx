@@ -45,19 +45,9 @@ export default function RegisterPage() {
     }
   }
 
-  async function signUpSocial(provider: 'google' | 'github') {
-    setError('')
+  function signUpSocial(provider: 'google' | 'github') {
     setProviderLoading(provider)
-    try {
-      const result = await authClient.signIn.social({ provider, callbackURL: '/callback' })
-      if (result.error) {
-        setError('OAuth provider login failed. Please check configuration.')
-        setProviderLoading(null)
-      }
-    } catch {
-      setError('Failed to connect to OAuth provider.')
-      setProviderLoading(null)
-    }
+    window.location.assign(`/api/auth/${provider}`)
   }
 
   return (
