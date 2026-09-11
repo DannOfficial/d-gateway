@@ -46,6 +46,24 @@ export async function POST(request) {
   }
 
   const db = await getDb()
+
+  // Enforce Role-based Bot Limit
+  const userRole = String(user.role || 'free').toLowerCase()
+  const currentBotCount = await db.collection('bots').countDocuments({ userId: user._id })
+
+  const LIMITS = { free: 3, vip: 10, premium: 25, admin: Infinity }
+  const maxLimit = LIMITS[userRole] !== undefined ? LIMITS[userRole] : 3
+
+  if (currentBotCount >= maxLimit) {
+    return NextResponse.json({
+      error: `Role '${userRole.toUpperCase()}' Anda dibatasi maksimal ${maxLimit} bot saja per bulan. Silakan upgrade role Anda (VIP / Premium / Admin) untuk menambah lebih banyak bot.`,
+      roleLimitReached: true,
+      role: userRole,
+      limit: maxLimit,
+      currentCount: currentBotCount,
+    }, { status: 403 })
+  }
+
   const botDoc = {
     userId: user._id,
     name,
