@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '../../../lib/auth'
 import { getDb, ObjectId } from '../../../lib/mongodb'
+import bcrypt from 'bcryptjs'
 
 export async function POST(request) {
   const user = await getCurrentUser()
@@ -8,7 +9,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json()
-    const { surveySource, name } = body
+    const { surveySource, name, email, password, twoFactorEnabled } = body
 
     const updateDoc = { updatedAt: new Date() }
     if (typeof surveySource === 'string') {
@@ -17,6 +18,12 @@ export async function POST(request) {
     if (typeof name === 'string' && name.trim()) {
       updateDoc.name = name.trim()
     }
+    if (typeof email === 'string' && email.trim() && email.trim().toLowerCase() !== user.email) {
+      updateDoc.email = email.trim().toLowerCase()
+      updateDoc.emailVerified = false
+    }
+    if (typeof password === 'string' && password.length >= 8) updateDoc.password = await bcrypt.hash(password, 12)
+    if (typeof twoFactorEnabled === 'boolean') updateDoc.twoFactorEnabled = twoFactorEnabled
 
     const db = await getDb()
     const uId = user._id ? user._id : user.id

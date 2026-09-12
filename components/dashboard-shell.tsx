@@ -65,6 +65,13 @@ export default function DashboardShell() {
   const [query, setQuery] = useState('')
   const [dark, setDark] = useState(true)
   const [live, setLive] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [profileName, setProfileName] = useState('')
+  const [profileEmail, setProfileEmail] = useState('')
+  const [profilePassword, setProfilePassword] = useState('')
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+  const [profileMessage, setProfileMessage] = useState('')
 
   async function load(silent = false) {
     if (!silent) setLoading(true); else setRefreshing(true)
@@ -188,6 +195,7 @@ export default function DashboardShell() {
   }
 
   async function removeBot(id: string) {
+    if (!window.confirm('Delete this bot and all of its logs? This cannot be undone.')) return
     const previous = bots
     setBots((current) => current.filter((bot) => bot.id !== id))
     const response = await fetch(`/api/bots/${id}`, { method: 'DELETE' })
@@ -224,8 +232,24 @@ export default function DashboardShell() {
   }
 
   async function handleDeleteCommand(id: string) {
+    if (!window.confirm('Delete this command? This cannot be undone.')) return
     setCommandsList((cur) => cur.filter((c) => c.id !== id))
     await fetch(`/api/commands/${id}`, { method: 'DELETE' })
+  }
+
+  async function botAction(bot: BotItem, action: 'start' | 'stop' | 'restart') {
+    const response = await fetch(`/api/bots/${bot.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action }) })
+    if (response.ok) {
+      const data = await response.json()
+      setBots((current) => current.map((item) => item.id === bot.id ? data.bot : item))
+    }
+  }
+
+  async function saveProfile(event: React.FormEvent) {
+    event.preventDefault()
+    const response = await fetch('/api/profile', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: profileName, email: profileEmail, password: profilePassword || undefined, twoFactorEnabled }) })
+    setProfileMessage(response.ok ? 'Profile updated.' : 'Unable to update profile.')
+    if (response.ok) { setUser((current) => current ? { ...current, name: profileName } : current); setTimeout(() => setProfileOpen(false), 700) }
   }
 
   function resetCmdForm() {
@@ -338,10 +362,11 @@ export default function DashboardShell() {
               <button className="icon-button" aria-label="Toggle theme" onClick={toggleTheme}>
                 {dark ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-              <button className="icon-button" aria-label="Notifications">
+              <button className="icon-button relative" aria-label="Notifications" onClick={() => setNotificationsOpen(!notificationsOpen)}>
                 <Bell size={18} /><i />
               </button>
-              <button className="profile-chip" onClick={logout}>
+              {notificationsOpen && <div className="absolute right-20 top-16 z-30 w-72 rounded-xl border border-border bg-card p-4 shadow-xl"><b className="text-sm">Notifications</b><p className="mt-2 text-xs text-muted-foreground">{logs.length ? `${logs.length} recent webhook events` : 'No new notifications.'}</p></div>}
+              <button className="profile-chip" onClick={() => { setProfileName(user?.name || ''); setProfileEmail(user?.email || ''); setProfileOpen(true) }}>
                 <span className="avatar small">{(user?.name || 'D').slice(0, 1).toUpperCase()}</span>
                 <span className="profile-name">{user?.name || 'Developer'}</span>
                 <ChevronDown size={15} />
@@ -353,7 +378,7 @@ export default function DashboardShell() {
             <div className="hero-row">
               <div>
                 <p className="eyebrow"><span className="live-dot" /> REALTIME TELEGRAM GATEWAY</p>
-                <h1>Your command center.</h1>
+                <h1>Welcome back, {user?.name?.split(' ')[0] || 'builder'}.</h1>
                 <p className="subtitle">Monitor every Telegram bot, custom command, and webhook event from one workspace.</p>
               </div>
               <button className="primary-button" onClick={() => setModal(true)}>
@@ -439,6 +464,8 @@ export default function DashboardShell() {
                             <i />
                             {isConnected ? 'Operational' : isError ? 'Token Error' : 'Pending webhook'}
                           </span>
+                          <button className="ghost-button compact" onClick={() => botAction(bot, isConnected ? 'stop' : 'start')}>{isConnected ? 'Stop' : 'Start'}</button>
+                          <button className="ghost-button compact" onClick={() => botAction(bot, 'restart')}>Restart</button>
                           <button aria-label={`Delete ${bot.name}`} className="delete-button" onClick={() => removeBot(bot.id)}>
                             <Trash2 size={16} />
                           </button>
@@ -632,14 +659,32 @@ export default function DashboardShell() {
 
               {cmdResponseType === 'image' && (
                 <label className="block text-xs font-semibold">
-                  Direct Image URL (.jpg / .png)
-                  <input value={cmdImageUrl} onChange={(e) => setCmdImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" className="w-full mt-1 p-2 rounded border border-input bg-background" />
+                  Media URL (image, MP4, GIF, WebM)
+                  <input value={cmdImageUrl} onChange={(e) => setCmdImageUrl(e.target.value)} placeholder="https://cdn.example.com/media.gif" className="w-full mt-1 p-2 rounded border border-input bg-background" />
+                  <input type="file" accept="image/*,video/mp4,video/webm,image/gif" onChange={(e) => { const file = e.target.files?.[0]; if (file) setCmdImageUrl(URL.createObjectURL(file)) }} className="mt-2 w-full text-xs" />
                 </label>
+              )}
+              {profileOpen && (
+                <div className="modal-backdrop">
+                  <div className="modal-card">
+                    <div className="modal-top"><div><span className="eyebrow">ACCOUNT</span><h2>Profile settings</h2></div><button className="icon-button" onClick={() => setProfileOpen(false)}><X size={18} /></button></div>
+                    <form onSubmit={saveProfile} className="space-y-4 mt-4">
+                      <label className="block text-sm">Display name<input required value={profileName} onChange={(e) => setProfileName(e.target.value)} className="mt-1 w-full rounded border border-input bg-background p-2" /></label>
+                      <label className="block text-sm">Email<input disabled value={user?.email || ''} className="mt-1 w-full rounded border border-input bg-muted p-2" /></label>
+                      <label className="block text-sm">New email<input type="email" value={profileEmail} onChange={(e) => setProfileEmail(e.target.value)} className="mt-1 w-full rounded border border-input bg-background p-2" /></label>
+                      <label className="block text-sm">New password<input type="password" minLength={8} value={profilePassword} onChange={(e) => setProfilePassword(e.target.value)} className="mt-1 w-full rounded border border-input bg-background p-2" placeholder="Leave blank to keep current" /></label>
+                      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={twoFactorEnabled} onChange={(e) => setTwoFactorEnabled(e.target.checked)} /> Enable two-factor authentication</label>
+                      <p className="text-xs text-muted-foreground">Changing your email sends a fresh verification request.</p>
+                      {profileMessage && <p className="text-sm text-primary">{profileMessage}</p>}
+                      <button className="primary-button full" type="submit">Save profile</button>
+                    </form>
+                  </div>
+                </div>
               )}
 
               <label className="block text-xs font-semibold">
                 Teks Balasan (HTML Supported)
-                <textarea value={cmdResponse} onChange={(e) => setCmdResponse(e.target.value)} rows={3} placeholder="Format <b>HTML</b> didukung..." className="w-full mt-1 p-2 rounded border border-input bg-background" />
+                <textarea value={cmdResponse} onChange={(e) => setCmdResponse(e.target.value)} rows={3} placeholder="Use @username @fullname @id @time @date @timezone @botname. Format <b>HTML</b> didukung..." className="w-full mt-1 p-2 rounded border border-input bg-background" />
               </label>
 
               {(cmdResponseType === 'hydrated_button' || cmdResponseType === 'callback_button') && (

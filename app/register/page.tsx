@@ -15,9 +15,12 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const [providerLoading, setProviderLoading] = useState<'google' | 'github' | null>(null)
+  const [terms, setTerms] = useState(false)
+  const [captcha, setCaptcha] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!terms || !captcha) { setError('Please accept the Terms & Service and complete the captcha.'); return }
     setLoading(true)
     setError('')
     setSuccess('')
@@ -95,6 +98,14 @@ export default function RegisterPage() {
             </label>
             <label className="block text-sm">Password
               <input required minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} type="password" className="mt-1.5 w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring" placeholder="At least 8 characters" />
+            </label>
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} className="mt-0.5" />
+              <span>I agree to the <a href="/terms" className="text-primary underline">Terms &amp; Service</a> and Privacy Policy.</span>
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs">
+              <input type="checkbox" checked={captcha} onChange={(event) => setCaptcha(event.target.checked)} />
+              <span>I'm not a robot (captcha verification)</span>
             </label>
             {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
             <button disabled={loading || Boolean(providerLoading)} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">

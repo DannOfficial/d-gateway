@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Bot, Check, ChevronRight, Command, Menu, MessageCircle, ShieldCheck, Sparkles, Terminal, X } from 'lucide-react'
 
@@ -18,6 +18,8 @@ const plans = [
 
 export default function Page() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
+  useEffect(() => { fetch('/api/auth/me').then((response) => response.ok ? response.json() : null).then((data) => setAuthenticated(Boolean(data?.user))).catch(() => {}) }, [])
   return (
     <main className="min-h-screen overflow-hidden bg-[#07131b] text-[#eef7f4]">
       <div className="pointer-events-none fixed inset-0 opacity-70 [background-image:linear-gradient(rgba(255,255,255,.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] [background-size:64px_64px]" />
@@ -25,10 +27,10 @@ export default function Page() {
       <header className="relative z-20 mx-auto flex max-w-7xl items-center justify-between px-6 py-6 lg:px-10">
         <Link href="/" className="flex items-center gap-3 font-semibold tracking-tight"><span className="grid size-9 place-items-center rounded-xl bg-[#b7f36b] text-[#07131b]"><Terminal size={18} strokeWidth={2.5} /></span><span className="text-lg">dann<span className="text-[#b7f36b]">-</span>tele</span></Link>
         <nav className="hidden items-center gap-8 text-sm text-[#a9bbb9] md:flex"><Link href="#features" className="transition hover:text-white">Features</Link><Link href="#pricing" className="transition hover:text-white">Pricing</Link><Link href="/docs" className="transition hover:text-white">Docs</Link></nav>
-        <div className="hidden items-center gap-3 md:flex"><Link href="/login" className="px-3 py-2 text-sm text-[#c9d8d5] hover:text-white">Log in</Link><Link href="/register" className="rounded-lg bg-[#b7f36b] px-4 py-2.5 text-sm font-semibold text-[#07131b] transition hover:bg-[#d2ff99]">Start building <ArrowRight className="ml-1 inline size-4" /></Link></div>
+        <div className="hidden items-center gap-3 md:flex"><Link href={authenticated ? '/dashboard' : '/login'} className="px-3 py-2 text-sm text-[#c9d8d5] hover:text-white">{authenticated ? 'Dashboard' : 'Log in'}</Link>{!authenticated && <Link href="/register" className="rounded-lg bg-[#b7f36b] px-4 py-2.5 text-sm font-semibold text-[#07131b] transition hover:bg-[#d2ff99]">Start building <ArrowRight className="ml-1 inline size-4" /></Link>}</div>
         <button aria-label="Open menu" className="rounded-lg border border-white/10 p-2 md:hidden" onClick={() => setMobileOpen(!mobileOpen)}>{mobileOpen ? <X size={20} /> : <Menu size={20} />}</button>
       </header>
-      {mobileOpen && <div className="relative z-20 mx-6 flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#0d2029] p-5 md:hidden"><Link href="#features">Features</Link><Link href="#pricing">Pricing</Link><Link href="/docs">Docs</Link><Link href="/login">Log in</Link><Link href="/register" className="rounded-lg bg-[#b7f36b] px-4 py-2 text-center font-semibold text-[#07131b]">Start building</Link></div>}
+      {mobileOpen && <div className="relative z-20 mx-6 flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#0d2029] p-5 md:hidden"><Link href="#features">Features</Link><Link href="#pricing">Pricing</Link><Link href="/docs">Docs</Link><Link href={authenticated ? '/dashboard' : '/login'}>{authenticated ? 'Dashboard' : 'Log in'}</Link>{!authenticated && <Link href="/register" className="rounded-lg bg-[#b7f36b] px-4 py-2 text-center font-semibold text-[#07131b]">Start building</Link>}</div>}
 
       <section className="relative z-10 mx-auto max-w-7xl px-6 pb-24 pt-20 lg:px-10 lg:pb-32 lg:pt-28">
         <div className="max-w-4xl"><div className="mb-7 inline-flex items-center gap-2 rounded-full border border-[#b7f36b]/25 bg-[#b7f36b]/8 px-3 py-1.5 text-xs font-medium text-[#c9f79a]"><Sparkles size={14} /> Telegram operations, simplified</div><h1 className="max-w-4xl text-balance text-5xl font-semibold leading-[1.02] tracking-[-.06em] sm:text-7xl lg:text-[6.9rem]">Your bots.<br /><span className="text-[#b7f36b]">Less busywork.</span></h1><p className="mt-8 max-w-xl text-pretty text-lg leading-8 text-[#a9bbb9]">dann-tele is the calm command center for Telegram builders. Connect bots, manage commands, and understand every message in one place.</p><div className="mt-10 flex flex-wrap gap-3"><Link href="/register" className="rounded-lg bg-[#b7f36b] px-5 py-3.5 font-semibold text-[#07131b] hover:bg-[#d2ff99]">Create your workspace <ArrowRight className="ml-2 inline size-4" /></Link><Link href="/docs" className="rounded-lg border border-white/15 px-5 py-3.5 font-medium text-[#d9e4e1] hover:bg-white/5">Read the docs</Link></div></div>
