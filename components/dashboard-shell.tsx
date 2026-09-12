@@ -61,12 +61,18 @@ export default function DashboardShell() {
   const [cmdImageUrl, setCmdImageUrl] = useState('')
   const [cmdButtons, setCmdButtons] = useState<Array<{ label: string; type: 'url' | 'callback'; value: string }>>([])
   const [cmdRole, setCmdRole] = useState<'user' | 'admin' | 'superadmin' | 'owner'>('user')
+  const [cmdScrapeUrl, setCmdScrapeUrl] = useState('')
+  const [cmdRequireQuery, setCmdRequireQuery] = useState(false)
+  const [uploadingMedia, setUploadingMedia] = useState(false)
+  const [scrapeTesting, setScrapeTesting] = useState(false)
+  const [scrapeResult, setScrapeResult] = useState('')
 
   const [query, setQuery] = useState('')
   const [dark, setDark] = useState(true)
   const [live, setLive] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
   const [profileName, setProfileName] = useState('')
   const [profileEmail, setProfileEmail] = useState('')
   const [profilePassword, setProfilePassword] = useState('')
@@ -332,8 +338,10 @@ export default function DashboardShell() {
 
           <p className="nav-label">Configure</p>
           <nav className="side-nav">
-            <a href="#settings"><Settings size={17} />Settings</a>
-            <a href="/docs"><CircleHelp size={17} />Documentation & API</a>
+            <Link href="/settings"><Settings size={17} />Settings</Link>
+            <Link href="/profile"><Shield size={17} />My Profile</Link>
+            <a href="/api/db/export" download><Zap size={17} />Export DB JSON</a>
+            <Link href="/docs"><CircleHelp size={17} />Documentation & API</Link>
           </nav>
 
           <div className="sidebar-bottom">
@@ -366,11 +374,33 @@ export default function DashboardShell() {
                 <Bell size={18} /><i />
               </button>
               {notificationsOpen && <div className="absolute right-20 top-16 z-30 w-72 rounded-xl border border-border bg-card p-4 shadow-xl"><b className="text-sm">Notifications</b><p className="mt-2 text-xs text-muted-foreground">{logs.length ? `${logs.length} recent webhook events` : 'No new notifications.'}</p></div>}
-              <button className="profile-chip" onClick={() => { setProfileName(user?.name || ''); setProfileEmail(user?.email || ''); setProfileOpen(true) }}>
-                <span className="avatar small">{(user?.name || 'D').slice(0, 1).toUpperCase()}</span>
-                <span className="profile-name">{user?.name || 'Developer'}</span>
-                <ChevronDown size={15} />
-              </button>
+              <div className="relative">
+                <button className="profile-chip" onClick={() => setDropdownOpen(!dropdownOpen)}>
+                  <span className="avatar small">{(user?.name || 'D').slice(0, 1).toUpperCase()}</span>
+                  <span className="profile-name">{user?.name || 'Developer'}</span>
+                  <ChevronDown size={15} />
+                </button>
+                {dropdownOpen && (
+                  <div className="absolute right-0 top-12 z-40 w-52 rounded-xl border border-border bg-card p-2 shadow-2xl flex flex-col gap-1 text-xs">
+                    <div className="px-3 py-2 border-b border-border">
+                      <p className="font-bold truncate">{user?.name || 'User'}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{user?.email}</p>
+                    </div>
+                    <Link href="/profile" onClick={() => setDropdownOpen(false)} className="px-3 py-2 rounded hover:bg-muted flex items-center gap-2">
+                      <Shield size={14} /> Profile Settings
+                    </Link>
+                    <Link href="/settings" onClick={() => setDropdownOpen(false)} className="px-3 py-2 rounded hover:bg-muted flex items-center gap-2">
+                      <Settings size={14} /> Bot Settings
+                    </Link>
+                    <a href="/api/db/export" download onClick={() => setDropdownOpen(false)} className="px-3 py-2 rounded hover:bg-muted flex items-center gap-2">
+                      <Zap size={14} /> Export Database
+                    </a>
+                    <button onClick={logout} className="px-3 py-2 rounded hover:bg-destructive/10 text-destructive text-left flex items-center gap-2">
+                      <LogOut size={14} /> Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
