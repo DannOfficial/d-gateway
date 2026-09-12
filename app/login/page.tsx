@@ -38,19 +38,9 @@ export default function LoginPage() {
     }
   }
 
-  async function signIn(provider: 'google' | 'github') {
-    setError('')
+  function signIn(provider: 'google' | 'github') {
     setProviderLoading(provider)
-    try {
-      const result = await authClient.signIn.social({ provider, callbackURL: '/callback' })
-      if (result.error) {
-        setError('This provider is unavailable. Check your OAuth setup or configuration.')
-        setProviderLoading(null)
-      }
-    } catch {
-      setError('Failed to initiate social login.')
-      setProviderLoading(null)
-    }
+    window.location.assign(`/api/auth/${provider}`)
   }
 
   return (
