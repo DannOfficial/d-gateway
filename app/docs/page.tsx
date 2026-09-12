@@ -109,10 +109,10 @@ export default function DocsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#07131b] text-[#eef7f4] px-4 py-8 md:px-12 lg:px-20">
+    <main className="min-h-screen bg-[#07131b] text-[#eef7f4] px-4 py-6 sm:py-8 md:px-12 lg:px-20 overflow-x-hidden">
       <div className="mx-auto max-w-6xl">
         {/* Header Nav */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-6">
           <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-lg hover:opacity-90">
             <span className="grid size-8 place-items-center rounded-lg bg-[#b7f36b] text-[#07131b]">
               <Terminal size={16} strokeWidth={2.5} />
@@ -120,7 +120,7 @@ export default function DocsPage() {
             dann<span className="text-[#b7f36b]">-</span>tele API Docs
           </Link>
 
-          <Link href="/dashboard" className="rounded-lg bg-[#b7f36b] px-4 py-2 text-xs font-semibold text-[#07131b] hover:bg-[#d2ff99] transition">
+          <Link href="/dashboard" className="w-full sm:w-auto text-center rounded-lg bg-[#b7f36b] px-4 py-2 text-xs font-semibold text-[#07131b] hover:bg-[#d2ff99] transition">
             Go to Dashboard →
           </Link>
         </div>
@@ -184,14 +184,14 @@ export default function DocsPage() {
           </div>
 
           {/* Endpoint Selector Tabs */}
-          <div className="mt-6 flex flex-wrap gap-2 border-b border-white/10 pb-4">
+          <div className="mt-6 flex overflow-x-auto gap-2 border-b border-white/10 pb-4 max-w-full">
             {ENDPOINTS.map((ep) => {
               const isActive = activeEndpoint.id === ep.id
               return (
                 <button
                   key={ep.id}
                   onClick={() => selectEndpoint(ep)}
-                  className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-mono transition-all ${
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-mono whitespace-nowrap transition-all flex-shrink-0 ${
                     isActive
                       ? 'bg-[#b7f36b] font-bold text-[#07131b]'
                       : 'border border-white/10 bg-white/5 text-[#91a6a2] hover:bg-white/10 hover:text-white'
@@ -202,7 +202,7 @@ export default function DocsPage() {
                   }`}>
                     {ep.method}
                   </span>
-                  {ep.name}
+                  <span className="truncate max-w-[150px] sm:max-w-none">{ep.name}</span>
                 </button>
               )
             })}

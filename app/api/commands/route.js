@@ -30,6 +30,8 @@ export async function GET(request) {
     imageUrl: cmd.imageUrl || '',
     buttons: cmd.buttons || [], // Array of { label, type: 'url'|'callback', value }
     allowedRole: cmd.allowedRole || 'user', // 'user' | 'admin' | 'superadmin' | 'owner'
+      scrapeUrl: cmd.scrapeUrl || '',
+      requireQuery: Boolean(cmd.requireQuery),
     createdAt: cmd.createdAt,
   }))
 
@@ -43,7 +45,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json()
-    const { id, botId, command, response, mode, limit, responseType, imageUrl, buttons, allowedRole } = body
+    const { id, botId, command, response, mode, limit, responseType, imageUrl, buttons, allowedRole, scrapeUrl, requireQuery } = body
 
     if (!command || !String(command).trim()) {
       return NextResponse.json({ error: 'Command string is required (e.g. /menu or /start).' }, { status: 400 })
@@ -65,6 +67,8 @@ export async function POST(request) {
       imageUrl: String(imageUrl || '').trim(),
       buttons: Array.isArray(buttons) ? buttons : [],
       allowedRole: ['user', 'admin', 'superadmin', 'owner'].includes(allowedRole) ? allowedRole : 'user',
+      scrapeUrl: String(scrapeUrl || '').trim(),
+      requireQuery: Boolean(requireQuery),
       updatedAt: new Date(),
     }
 
