@@ -132,6 +132,7 @@ export async function POST(request, { params }) {
   const commandParts = text.trim().split(' ')
   const rawCmd = commandParts[0].toLowerCase()
   const cmdClean = rawCmd.split('@')[0] // remove @botusername suffix in groups
+  const queryParam = commandParts.slice(1).join(' ').trim()
 
     // Lightweight, persistent RPG commands. State is keyed by bot, chat and Telegram user.
     if (bot.rpgMode && ['/rpg', '/hunt', '/heal', '/daily', '/inventory'].includes(cmdClean)) {
@@ -244,12 +245,53 @@ export async function POST(request, { params }) {
       reply_markup = { inline_keyboard }
     }
 
+    // Check required parameter/query
+    if (customCmd.requireQuery && !queryParam) {
+      await sendTelegramPayload(bot.token, 'sendMessage', {
+        chat_id: chatId,
+        text: `Penggunaan perintah ini memerlukan parameter/query.\nContoh: <code>${customCmd.command} kucing</code>`,
+        parse_mode: 'HTML',
+        reply_to_message_id: message.message_id,
+      })
+      return NextResponse.json({ ok: true })
+    }
+
+    // Handle scraping if scrapeUrl is set
+    let scrapeOutput = ''
+    if (customCmd.scrapeUrl) {
+      try {
+        const scrapeTarget = new URL(customCmd.scrapeUrl)
+        if (queryParam) {
+          scrapeTarget.searchParams.set('q', queryParam)
+          scrapeTarget.searchParams.set('query', queryParam)
+        }
+        const fetchRes = await fetch(scrapeTarget.toString(), {
+          headers: { 'User-Agent': 'Dann-Tele-Bot/1.0' },
+        })
+        const contentType = fetchRes.headers.get('content-type') || ''
+        if (contentType.includes('application/json')) {
+          const json = await fetchRes.json()
+          scrapeOutput = typeof json === 'object' ? JSON.stringify(json, null, 2) : String(json)
+        } else {
+          scrapeOutput = await fetchRes.text()
+        }
+        scrapeOutput = scrapeOutput.slice(0, 2000)
+      } catch (err) {
+        scrapeOutput = `[Scraping Error: ${err.message}]`
+      }
+    }
+
+    let finalResponse = renderTemplate(customCmd.response || 'Command executed.', message, bot)
+    if (queryParam) finalResponse = finalResponse.replace(/@query\b/g, html(queryParam))
+    if (scrapeOutput) finalResponse += `\n\n<b>Hasil API/Scrape:</b>\n<pre>${html(scrapeOutput)}</pre>`
+    if (bot.footer) finalResponse += `\n\n${bot.footer}`
+
     // 3. Send response according to type
     if (customCmd.responseType === 'image' && customCmd.imageUrl) {
       await sendTelegramPayload(bot.token, 'sendPhoto', {
         chat_id: chatId,
         photo: customCmd.imageUrl,
-        caption: customCmd.response || '',
+        caption: finalResponse,
         parse_mode: 'HTML',
         reply_markup,
         reply_to_message_id: message.message_id,
@@ -257,7 +299,7 @@ export async function POST(request, { params }) {
     } else {
       await sendTelegramPayload(bot.token, 'sendMessage', {
         chat_id: chatId,
-        text: renderTemplate(customCmd.response || 'Command executed.', message, bot) + (bot.footer ? `\n\n${bot.footer}` : ''),
+        text: finalResponse,
         parse_mode: 'HTML',
         reply_markup,
         reply_to_message_id: message.message_id,
