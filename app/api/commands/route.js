@@ -23,6 +23,7 @@ export async function GET(request) {
     botId: cmd.botId ? cmd.botId.toString() : null,
     command: cmd.command,
     response: cmd.response,
+    decorations: Array.isArray(cmd.decorations) ? cmd.decorations : [],
     mode: cmd.mode || 'all', // 'all' | 'group' | 'private'
     limit: typeof cmd.limit === 'number' ? cmd.limit : -1, // -1 means unlimited
     usageCount: cmd.usageCount || 0,
@@ -30,8 +31,9 @@ export async function GET(request) {
     imageUrl: cmd.imageUrl || '',
     buttons: cmd.buttons || [], // Array of { label, type: 'url'|'callback', value }
     allowedRole: cmd.allowedRole || 'user', // 'user' | 'admin' | 'superadmin' | 'owner'
-      scrapeUrl: cmd.scrapeUrl || '',
-      requireQuery: Boolean(cmd.requireQuery),
+    aiSessionMode: Boolean(cmd.aiSessionMode),
+    scrapeUrl: cmd.scrapeUrl || '',
+    requireQuery: Boolean(cmd.requireQuery),
     createdAt: cmd.createdAt,
   }))
 
@@ -45,7 +47,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json()
-    const { id, botId, command, response, mode, limit, responseType, imageUrl, buttons, allowedRole, scrapeUrl, requireQuery } = body
+    const { id, botId, command, response, decorations, mode, limit, responseType, imageUrl, buttons, allowedRole, aiSessionMode, scrapeUrl, requireQuery } = body
 
     if (!command || !String(command).trim()) {
       return NextResponse.json({ error: 'Command string is required (e.g. /menu or /start).' }, { status: 400 })
@@ -61,12 +63,14 @@ export async function POST(request) {
       botId: botId && ObjectId.isValid(botId) ? new ObjectId(botId) : null,
       command: formattedCmd,
       response: String(response || '').trim(),
+      decorations: Array.isArray(decorations) ? decorations.map(String) : [],
       mode: ['all', 'group', 'private'].includes(mode) ? mode : 'all',
       limit: typeof limit === 'number' ? limit : -1,
       responseType: ['text', 'image', 'hydrated_button', 'callback_button'].includes(responseType) ? responseType : 'text',
       imageUrl: String(imageUrl || '').trim(),
       buttons: Array.isArray(buttons) ? buttons : [],
       allowedRole: ['user', 'admin', 'superadmin', 'owner'].includes(allowedRole) ? allowedRole : 'user',
+      aiSessionMode: Boolean(aiSessionMode),
       scrapeUrl: String(scrapeUrl || '').trim(),
       requireQuery: Boolean(requireQuery),
       updatedAt: new Date(),
