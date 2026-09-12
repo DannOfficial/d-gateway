@@ -2,6 +2,24 @@ import { NextResponse } from 'next/server'
 import { ObjectId } from 'mongodb'
 import { getDb } from '../../../../../lib/mongodb'
 
+function html(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+
+function renderTemplate(value, message, bot) {
+  const from = message.from || {}
+  const now = new Date()
+  return String(value || '').replace(/@(username|fullname|id|time|date|timezone|botname)\b/g, (_, key) => ({
+    username: `@${from.username || from.first_name || 'user'}`,
+    fullname: [from.first_name, from.last_name].filter(Boolean).join(' ') || 'user',
+    id: from.id || '',
+    time: now.toLocaleTimeString(),
+    date: now.toLocaleDateString(),
+    timezone: bot.timezone || 'UTC',
+    botname: bot.name || 'Telegram Bot',
+  }[key]))
+}
+
 async function sendTelegramPayload(token, endpoint, payload) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 8000)
@@ -16,6 +34,7 @@ async function sendTelegramPayload(token, endpoint, payload) {
       const errJson = await response.json().catch(() => ({}))
       console.error(`[Telegram API] ${endpoint} failed:`, errJson)
     }
+
   } catch (err) {
     console.error(`[Telegram API] ${endpoint} exception:`, err)
   } finally {
@@ -52,13 +71,18 @@ export async function POST(request, { params }) {
       text: `Callback received: ${data}`,
     })
     if (chatId) {
+      const action = String(data).replace(/^rpg:/, '')
+      if (['hunt', 'heal', 'daily', 'inventory'].includes(action)) {
+        update.message = { chat: cq.message.chat, from: cq.from, text: `/${action}`, message_id: cq.message.message_id }
+      } else {
       await sendTelegramPayload(bot.token, 'sendMessage', {
         chat_id: chatId,
-        text: `🔘 <b>Button Action Processed:</b> <code>${data}</code>`,
+        text: `<b>Button Action Processed:</b> <code>${html(data)}</code>`,
         parse_mode: 'HTML',
       })
     }
-    return NextResponse.json({ ok: true })
+    if (!update.message) return NextResponse.json({ ok: true })
+    } else return NextResponse.json({ ok: true })
   }
 
   const message = update.message || update.edited_message
@@ -109,6 +133,43 @@ export async function POST(request, { params }) {
   const rawCmd = commandParts[0].toLowerCase()
   const cmdClean = rawCmd.split('@')[0] // remove @botusername suffix in groups
 
+    // Lightweight, persistent RPG commands. State is keyed by bot, chat and Telegram user.
+    if (bot.rpgMode && ['/rpg', '/hunt', '/heal', '/daily', '/inventory'].includes(cmdClean)) {
+      const playerKey = `${bot._id}:${chatId}:${senderId || senderUsername}`
+      const players = db.collection('rpg_players')
+      const player = await players.findOne({ key: playerKey }) || {
+        key: playerKey, botId: bot._id, chatId: String(chatId), userId: senderId, username: senderUsername,
+        hp: 100, maxHp: 100, xp: 0, gold: 0, inventory: [], dailyAt: null,
+      }
+      let reply
+      if (cmdClean === '/rpg') {
+        reply = `<b>RPG Profile</b>\nHP: ${player.hp}/${player.maxHp}\nXP: ${player.xp}\nGold: ${player.gold}`
+      } else if (cmdClean === '/inventory') {
+        reply = `<b>Inventory</b>\n${player.inventory.length ? player.inventory.map((item) => `- ${html(item)}`).join('\n') : 'Empty'}`
+      } else if (cmdClean === '/heal') {
+        player.hp = player.maxHp
+        reply = 'You restored your health to full.'
+      } else if (cmdClean === '/daily') {
+        const today = new Date().toISOString().slice(0, 10)
+        if (player.dailyAt === today) reply = 'Daily reward already claimed. Come back tomorrow.'
+        else { player.dailyAt = today; player.gold += 50; player.xp += 25; reply = 'Daily reward: +50 gold and +25 XP!' }
+      } else {
+        const won = Math.random() > 0.25
+        if (won) { player.gold += 10; player.xp += 15; player.inventory.push('Hunt trophy'); reply = 'Hunt successful! +10 gold, +15 XP.' }
+        else { player.hp = Math.max(0, player.hp - 10); reply = 'The hunt failed. You lost 10 HP.' }
+      }
+      await players.updateOne({ key: playerKey }, { $set: player }, { upsert: true })
+      await sendTelegramPayload(bot.token, 'sendMessage', {
+        chat_id: chatId, text: reply + (bot.footer ? `\n\n${bot.footer}` : ''), parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [[
+          { text: 'Hunt', callback_data: 'rpg:hunt' }, { text: 'Heal', callback_data: 'rpg:heal' },
+          { text: 'Inventory', callback_data: 'rpg:inventory' },
+        ]] }, reply_to_message_id: message.message_id,
+      })
+      return NextResponse.json({ ok: true })
+    }
+
+
   // Check custom user-defined commands in MongoDB
   const customCmd = await db.collection('commands').findOne({
     $or: [{ botId: bot._id }, { userId: bot.userId }],
@@ -124,7 +185,7 @@ export async function POST(request, { params }) {
     if (userRank < requiredRank) {
       await sendTelegramPayload(bot.token, 'sendMessage', {
         chat_id: chatId,
-        text: `⛔ Perintah ini membutuhkan role minimal <b>${(customCmd.allowedRole || 'user').toUpperCase()}</b>. Role Anda: <b>${botUserRole.toUpperCase()}</b>.`,
+        text: `Perintah ini membutuhkan role minimal <b>${(customCmd.allowedRole || 'user').toUpperCase()}</b>. Role Anda: <b>${botUserRole.toUpperCase()}</b>.`,
         parse_mode: 'HTML',
         reply_to_message_id: message.message_id,
       })
@@ -135,7 +196,7 @@ export async function POST(request, { params }) {
     if (customCmd.mode === 'group' && !isGroup) {
       await sendTelegramPayload(bot.token, 'sendMessage', {
         chat_id: chatId,
-        text: '⚠️ Perintah ini hanya dapat digunakan dalam <b>Mode Grup</b>.',
+        text: 'Perintah ini hanya dapat digunakan dalam <b>Mode Grup</b>.',
         parse_mode: 'HTML',
         reply_to_message_id: message.message_id,
       })
@@ -145,7 +206,7 @@ export async function POST(request, { params }) {
     if (customCmd.mode === 'private' && isGroup) {
       await sendTelegramPayload(bot.token, 'sendMessage', {
         chat_id: chatId,
-        text: '⚠️ Perintah ini hanya dapat digunakan dalam <b>Mode Private (DM)</b>.',
+        text: 'Perintah ini hanya dapat digunakan dalam <b>Mode Private (DM)</b>.',
         parse_mode: 'HTML',
         reply_to_message_id: message.message_id,
       })
@@ -157,7 +218,7 @@ export async function POST(request, { params }) {
       if ((customCmd.usageCount || 0) >= customCmd.limit) {
         await sendTelegramPayload(bot.token, 'sendMessage', {
           chat_id: chatId,
-          text: '❌ Kuota penggunaan perintah ini telah habis.',
+          text: 'Kuota penggunaan perintah ini telah habis.',
           parse_mode: 'HTML',
           reply_to_message_id: message.message_id,
         })
@@ -196,7 +257,7 @@ export async function POST(request, { params }) {
     } else {
       await sendTelegramPayload(bot.token, 'sendMessage', {
         chat_id: chatId,
-        text: customCmd.response || 'Command executed.',
+        text: renderTemplate(customCmd.response || 'Command executed.', message, bot) + (bot.footer ? `\n\n${bot.footer}` : ''),
         parse_mode: 'HTML',
         reply_markup,
         reply_to_message_id: message.message_id,
@@ -210,28 +271,28 @@ export async function POST(request, { params }) {
   if (cmdClean === '/start') {
     await sendTelegramPayload(bot.token, 'sendMessage', {
       chat_id: chatId,
-      text: `🤖 <b>Welcome to ${bot.name || 'Dann-Tele Bot'}!</b>\n\nYour bot is successfully connected and integrated with <b>Dann-Tele Gateway</b>.\n\nType /help to view available commands.`,
+      text: `<b>Welcome to ${html(bot.name || 'Dann-Tele Bot')}!</b>\n\nYour bot is successfully connected and integrated with <b>Dann-Tele Gateway</b>.\n\nType /help to view available commands.` + (bot.footer ? `\n\n${bot.footer}` : ''),
       parse_mode: 'HTML',
       reply_to_message_id: message.message_id,
     })
   } else if (cmdClean === '/help') {
     await sendTelegramPayload(bot.token, 'sendMessage', {
       chat_id: chatId,
-      text: `📋 <b>Command List:</b>\n\n/start - Connect and initialize\n/status - Check bot gateway status\n/ping - Ping gateway latency\n/help - Show this help menu`,
+      text: `<b>Command List:</b>\n\n/start - Connect and initialize\n/status - Check bot gateway status\n/ping - Ping gateway latency\n/help - Show this help menu`,
       parse_mode: 'HTML',
       reply_to_message_id: message.message_id,
     })
   } else if (cmdClean === '/status') {
     await sendTelegramPayload(bot.token, 'sendMessage', {
       chat_id: chatId,
-      text: `✅ <b>Gateway Status:</b> Operational\n<b>Bot ID:</b> <code>${bot._id}</code>\n<b>Mode:</b> ${isGroup ? 'Group' : 'Private'}\n<b>Your Role:</b> ${botUserRole}`,
+      text: `<b>Gateway Status:</b> Operational\n<b>Bot ID:</b> <code>${bot._id}</code>\n<b>Mode:</b> ${isGroup ? 'Group' : 'Private'}\n<b>Your Role:</b> ${botUserRole}`,
       parse_mode: 'HTML',
       reply_to_message_id: message.message_id,
     })
   } else if (cmdClean === '/ping') {
     await sendTelegramPayload(bot.token, 'sendMessage', {
       chat_id: chatId,
-      text: `🏓 <b>Pong!</b> Gateway response time: &lt;100ms`,
+      text: `<b>Pong!</b> Gateway response time: &lt;100ms`,
       parse_mode: 'HTML',
       reply_to_message_id: message.message_id,
     })

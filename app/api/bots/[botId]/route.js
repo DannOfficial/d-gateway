@@ -62,9 +62,15 @@ export async function PATCH(request, { params }) {
 
   const { botId } = await params
   const body = await request.json()
-  const name = String(body.name || '').trim()
+  const name = body.name === undefined ? undefined : String(body.name || '').trim()
+  const action = body.action
+  const settings = {
+    ...(body.timezone !== undefined ? { timezone: String(body.timezone) } : {}),
+    ...(body.rpgMode !== undefined ? { rpgMode: Boolean(body.rpgMode) } : {}),
+    ...(body.footer !== undefined ? { footer: String(body.footer).slice(0, 500) } : {}),
+  }
 
-  if (!name || name.length > 80) {
+  if (name !== undefined && (!name || name.length > 80)) {
     return NextResponse.json({ error: 'Invalid bot name.' }, { status: 400 })
   }
 
@@ -72,7 +78,26 @@ export async function PATCH(request, { params }) {
   if (!bot) return NextResponse.json({ error: 'Bot not found' }, { status: 404 })
 
   const db = await getDb()
-  await db.collection('bots').updateOne({ _id: bot._id }, { $set: { name, updatedAt: new Date() } })
+  const updates = { ...settings, updatedAt: new Date() }
+  if (name !== undefined) updates.name = name
+  if (action === 'start' || action === 'restart') {
+    if (!bot.token) return NextResponse.json({ error: 'Bot token is missing.' }, { status: 400 })
+    const webhookUrl = `${new URL(request.url).origin}/api/telegram/webhook/${bot._id}`
+    const result = await fetch(`https://api.telegram.org/bot${bot.token}/setWebhook`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: webhookUrl }),
+    }).then((r) => r.json()).catch(() => ({ ok: false }))
+    if (!result.ok) return NextResponse.json({ error: 'Unable to start bot.' }, { status: 502 })
+    updates.status = 'connected'
+    updates.webhookUrl = webhookUrl
+  } else if (action === 'stop') {
+    if (!bot.token) return NextResponse.json({ error: 'Bot token is missing.' }, { status: 400 })
+    const result = await fetch(`https://api.telegram.org/bot${bot.token}/deleteWebhook`, { method: 'POST' })
+      .then((response) => response.json())
+      .catch(() => ({ ok: false }))
+    if (!result.ok) return NextResponse.json({ error: 'Unable to stop bot.' }, { status: 502 })
+    updates.status = 'stopped'
+  }
+  await db.collection('bots').updateOne({ _id: bot._id }, { $set: updates })
 
-  return NextResponse.json({ bot: publicBot({ ...bot, name }) })
+  return NextResponse.json({ bot: publicBot({ ...bot, ...updates }) })
 }
