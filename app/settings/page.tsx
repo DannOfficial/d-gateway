@@ -3,24 +3,16 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  Settings as SettingsIcon, Bot, Shield, Save, Download, LayoutDashboard, Command, List, LogOut, Menu, Moon, Sun, ChevronDown, User as UserIcon, Send, Clock, UserPlus, Zap, Database, Sparkles, Key
+  Settings as SettingsIcon, Bot, Save, Send, UserPlus, Database, Sparkles
 } from 'lucide-react'
 import { PuzzleSpinner } from '@/components/ui/puzzle-spinner'
+import { Card } from '@/components/ui/card'
+import { CustomSelect } from '@/components/ui/custom-select'
+import { Sidebar } from '@/components/layout/Sidebar'
+import { Navbar } from '@/components/layout/Navbar'
 
 type BotItem = { id: string; name: string; username: string | null; timezone?: string; rpgMode?: boolean; footer?: string; delay?: number }
 type User = { id?: string; name: string; email: string; role?: string }
-type RpgPlayer = {
-  id: string
-  nama: string
-  tag: string
-  health: number
-  money: number
-  bank: number
-  hewan: string[]
-  tanaman: string[]
-  kota: string
-  inventory: string[]
-}
 
 export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null)
@@ -41,40 +33,13 @@ export default function SettingsPage() {
   const [broadcastMsg, setBroadcastMsg] = useState('')
   const [broadcasting, setBroadcasting] = useState(false)
 
-  // RPG Players Table
-  const [rpgPlayers, setRpgPlayers] = useState<RpgPlayer[]>([
-    {
-      id: '1001',
-      nama: 'Dann Admin',
-      tag: '@dann_admin',
-      health: 100,
-      money: 1500,
-      bank: 5000,
-      hewan: ['Kucing Anggora', 'Ayam Kampong'],
-      tanaman: ['Padi', 'Jagung'],
-      kota: 'Jakarta',
-      inventory: ['Pedang Kayu', 'Obat Potion'],
-    },
-    {
-      id: '1002',
-      nama: 'Budi Petualang',
-      tag: '@budi_player',
-      health: 85,
-      money: 450,
-      bank: 1200,
-      hewan: ['Anjing'],
-      tanaman: ['Gandum'],
-      kota: 'Bandung',
-      inventory: ['Pisau Berburu'],
-    },
-  ])
-
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [dark, setDark] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   useEffect(() => {
     Promise.all([fetch('/api/auth/me'), fetch('/api/bots')])
@@ -185,82 +150,33 @@ export default function SettingsPage() {
   return (
     <main className="min-h-screen app-bg text-foreground">
       <div className="dashboard-grid">
-        {mobileOpen && <button aria-label="Close navigation" className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
-        <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
-          <div className="sidebar-brand">
-            <Link href="/" className="brand-mark">›_</Link>
-            <Link href="/" className="brand-name">dann-tele<span>settings</span></Link>
-          </div>
-          <div className="workspace-switch flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="avatar">{(user?.name || 'D').slice(0, 1).toUpperCase()}</span>
-              <span>
-                <b>{user?.name || 'Workspace'}</b>
-                <small>{user?.email || 'Personal workspace'}</small>
-              </span>
-            </div>
-            <span className="rounded bg-primary/20 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
-              {user?.role || 'free'}
-            </span>
-          </div>
-
-          <p className="nav-label">Navigation</p>
-          <nav className="side-nav">
-            <Link href="/dashboard"><LayoutDashboard size={17} /> Back to Dashboard</Link>
-            <Link href="/dashboard#bots"><Bot size={17} /> Bots Inventory</Link>
-            <Link href="/dashboard#commands"><Command size={17} /> Command Editor</Link>
-            <Link href="/dashboard#logs"><List size={17} /> Logs</Link>
-          </nav>
-
-          <p className="nav-label">Configure</p>
-          <nav className="side-nav">
-            <Link href="/settings" className="active"><SettingsIcon size={17} />Settings</Link>
-          </nav>
-
-          <div className="sidebar-bottom">
-            <button onClick={logout} className="logout-button">
-              <LogOut size={16} /> Sign out
-            </button>
-          </div>
-        </aside>
+        <Sidebar
+          activeTab="settings"
+          setActiveTab={() => {}}
+          mobileOpen={mobileOpen}
+          setMobileOpen={setMobileOpen}
+          user={user}
+          botsCount={bots.length}
+          live={true}
+          logout={logout}
+        />
 
         <section className="main-column">
-          <header className="topbar">
-            <button className="menu-button" onClick={() => setMobileOpen(true)}><Menu size={20} /></button>
-            <div className="crumb">
-              <span>Workspace</span><b>/</b><strong>Settings</strong>
-            </div>
-            <div className="top-actions">
-              <button className="icon-button" aria-label="Toggle theme" onClick={toggleTheme}>
-                {dark ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
-
-              <div className="relative">
-                <button className="profile-chip" onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}>
-                  <span className="avatar small">{(user?.name || 'D').slice(0, 1).toUpperCase()}</span>
-                  <span className="profile-name">{user?.name || 'User'}</span>
-                  <ChevronDown size={15} />
-                </button>
-
-                {profileDropdownOpen && (
-                  <div className="absolute right-0 top-12 z-40 w-64 rounded-xl border border-border bg-card p-4 shadow-2xl text-foreground space-y-3">
-                    <div className="border-b border-border pb-3">
-                      <p className="font-bold text-sm truncate">{user?.name || 'Developer'}</p>
-                      <p className="text-xs text-muted-foreground truncate">{user?.email || 'email@example.com'}</p>
-                    </div>
-                    <div className="space-y-1 text-xs">
-                      <Link href="/profile" onClick={() => setProfileDropdownOpen(false)} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-medium">
-                        <UserIcon size={14} /> Settings
-                      </Link>
-                      <button onClick={logout} className="w-full text-left flex items-center gap-2 p-2 rounded hover:bg-destructive/10 text-destructive font-medium">
-                        <LogOut size={14} /> Sign Out
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </header>
+          <Navbar
+            activeTab="settings"
+            user={user}
+            query=""
+            setQuery={() => {}}
+            dark={dark}
+            toggleTheme={toggleTheme}
+            notificationsOpen={notificationsOpen}
+            setNotificationsOpen={setNotificationsOpen}
+            profileDropdownOpen={profileDropdownOpen}
+            setProfileDropdownOpen={setProfileDropdownOpen}
+            setMobileOpen={setMobileOpen}
+            logsCount={0}
+            logout={logout}
+          />
 
           <div className="content-wrap space-y-8">
             <div>
@@ -269,7 +185,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Form Bot Target & Settings */}
-            <form onSubmit={handleSaveSettings} className="space-y-6 rounded-2xl border border-border bg-card p-6 shadow-xl text-xs">
+            <Card className="space-y-6 p-6 text-xs">
               <div className="space-y-4">
                 <h2 className="flex items-center gap-2 text-sm font-bold text-primary"><Bot size={16} /> Konfigurasi Target</h2>
                 {bots.length === 0 ? (
@@ -277,29 +193,32 @@ export default function SettingsPage() {
                 ) : (
                   <>
                     <label className="block font-semibold">Pilih Telegram Bot Target
-                      <select value={selectedBotId} onChange={(e) => handleSelectBot(e.target.value)} className="mt-1 w-full rounded-lg border border-input bg-background p-2.5">
-                        {bots.map((b) => (
-                          <option key={b.id} value={b.id}>{b.name} ({b.username ? `@${b.username}` : 'Bot'})</option>
-                        ))}
-                      </select>
+                      <CustomSelect
+                        value={selectedBotId}
+                        onChange={(val) => handleSelectBot(val)}
+                        options={bots.map((b) => ({
+                          value: b.id,
+                          label: `${b.name} (${b.username ? `@${b.username}` : 'Bot'})`,
+                        }))}
+                      />
                     </label>
 
                     <div className="grid grid-cols-2 gap-4">
                       <label className="block font-semibold">Realtime Response Timezone (WIB/WIT/WITA)
-                        <input value={botTimezone} onChange={(e) => setBotTimezone(e.target.value)} placeholder="Asia/Jakarta atau WIB" className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
+                        <input value={botTimezone} onChange={(e) => setBotTimezone(e.target.value)} placeholder="Asia/Jakarta atau WIB" className="mt-1 w-full rounded-xl border border-input bg-background p-2.5" />
                       </label>
                       <label className="block font-semibold">Set Response Delay (detik)
-                        <input type="number" value={botDelay} onChange={(e) => setBotDelay(Number(e.target.value))} placeholder="0" className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
+                        <input type="number" value={botDelay} onChange={(e) => setBotDelay(Number(e.target.value))} placeholder="0" className="mt-1 w-full rounded-xl border border-input bg-background p-2.5" />
                       </label>
                     </div>
 
-                    <label className="flex items-center gap-3 rounded-lg border border-border p-3">
+                    <label className="flex items-center gap-3 rounded-xl border border-border p-3">
                       <input type="checkbox" checked={rpgEnabled} onChange={(e) => setRpgEnabled(e.target.checked)} />
                       <span className="font-semibold">Aktifkan Engine Role Playing Game (RPG).</span>
                     </label>
 
                     <label className="block font-semibold">Footer
-                      <textarea value={botFooter} onChange={(e) => setBotFooter(e.target.value)} rows={2} placeholder="Powered by Dann-Tele Gateway" className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
+                      <textarea value={botFooter} onChange={(e) => setBotFooter(e.target.value)} rows={2} placeholder="Powered by Dann-Tele Gateway" className="mt-1 w-full rounded-xl border border-input bg-background p-2.5" />
                     </label>
 
                     {/* Gemini API Key Field */}
@@ -312,95 +231,61 @@ export default function SettingsPage() {
                         value={geminiApiKey}
                         onChange={(e) => setGeminiApiKey(e.target.value)}
                         placeholder="AIzaSy..."
-                        className="w-full p-2.5 rounded border border-input bg-background font-mono"
+                        className="w-full p-2.5 rounded-lg border border-input bg-background font-mono"
                       />
                       <p className="text-[11px] text-muted-foreground">Masukkan Gemini API Key agar bot secara otomatis dapat merespon pesan/command AI.</p>
                     </div>
 
-                    <button type="submit" disabled={saving} className="primary-button">
-                      {saving ? <PuzzleSpinner size="sm" /> : <><Save size={14} /> Simpan</>}
+                    <button type="submit" onClick={handleSaveSettings} disabled={saving} className="primary-button">
+                      {saving ? <PuzzleSpinner size="sm" /> : <><Save size={14} /> Simpan Konfigurasi →</>}
                     </button>
                   </>
                 )}
               </div>
-            </form>
+            </Card>
 
             {/* Broadcast & User Roles Panel */}
             <div className="grid gap-6 md:grid-cols-2 text-xs">
-              <div className="p-6 rounded-2xl border border-border bg-card space-y-4">
+              <Card className="p-6 space-y-4">
                 <h2 className="flex items-center gap-2 font-bold text-sm text-primary"><UserPlus size={16} /> Add Owner / Premium / Limit</h2>
                 <div className="space-y-3">
                   <label className="block font-semibold">Telegram User ID Target
-                    <input value={newOwnerId} onChange={(e) => setNewOwnerId(e.target.value)} placeholder="Contoh: 123456789" className="mt-1 w-full p-2.5 rounded border border-input bg-background" />
+                    <input value={newOwnerId} onChange={(e) => setNewOwnerId(e.target.value)} placeholder="Contoh: 123456789" className="mt-1 w-full p-2.5 rounded-xl border border-input bg-background" />
                   </label>
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block font-semibold">Akses Role
-                      <select value={newRole} onChange={(e) => setNewRole(e.target.value as any)} className="mt-1 w-full p-2.5 rounded border border-input bg-background">
-                        <option value="user">User</option>
-                        <option value="vip">VIP</option>
-                        <option value="premium">Premium</option>
-                        <option value="admin">Admin / Owner</option>
-                      </select>
+                      <CustomSelect
+                        value={newRole}
+                        onChange={(val) => setNewRole(val as any)}
+                        options={[
+                          { value: 'user', label: 'User' },
+                          { value: 'vip', label: 'VIP' },
+                          { value: 'premium', label: 'Premium' },
+                          { value: 'admin', label: 'Admin / Owner' },
+                        ]}
+                      />
                     </label>
                     <label className="block font-semibold">Limit Pengguna
-                      <input type="number" value={newLimit} onChange={(e) => setNewLimit(Number(e.target.value))} className="mt-1 w-full p-2.5 rounded border border-input bg-background" />
+                      <input type="number" value={newLimit} onChange={(e) => setNewLimit(Number(e.target.value))} className="mt-1 w-full p-2.5 rounded-xl border border-input bg-background" />
                     </label>
                   </div>
                   <button type="button" onClick={() => setMessage(`Role ${newRole} & Limit ${newLimit} berhasil ditambahkan ke ID ${newOwnerId || 'Target'}`)} className="primary-button full">
                     Tambahkan Hak Akses & Limit
                   </button>
                 </div>
-              </div>
+              </Card>
 
-              <div className="p-6 rounded-2xl border border-border bg-card space-y-4">
+              <Card className="p-6 space-y-4">
                 <h2 className="flex items-center gap-2 font-bold text-sm text-primary"><Send size={16} /> Broadcast Messaging</h2>
                 <form onSubmit={handleSendBroadcast} className="space-y-3">
                   <label className="block font-semibold">Pesan Broadcast
-                    <textarea value={broadcastMsg} onChange={(e) => setBroadcastMsg(e.target.value)} rows={3} placeholder="Pesan pengumuman untuk seluruh pengguna..." required className="mt-1 w-full p-2.5 rounded border border-input bg-background" />
+                    <textarea value={broadcastMsg} onChange={(e) => setBroadcastMsg(e.target.value)} rows={3} placeholder="Pesan pengumuman untuk seluruh pengguna..." required className="mt-1 w-full p-2.5 rounded-xl border border-input bg-background" />
                   </label>
                   <button type="submit" disabled={broadcasting} className="primary-button full">
                     {broadcasting ? <PuzzleSpinner size="sm" /> : 'Kirim Broadcast Sekarang →'}
                   </button>
                 </form>
-              </div>
-            </div>
-
-            {/* RPG Data Table */}
-            <div className="p-6 rounded-2xl border border-border bg-card space-y-4 text-xs">
-              <div className="flex items-center justify-between">
-                <h2 className="flex items-center gap-2 font-bold text-sm text-primary"><Database size={16} /> Tabel Data RPG Players (Inventory, Wealth, Hewan, Tanaman, Kota)</h2>
-                <span className="text-muted-foreground">{rpgPlayers.length} Total Registered Players</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="border-b border-border bg-muted/40 font-bold uppercase text-[10px]">
-                    <tr>
-                      <th className="p-2.5">Player / Tag</th>
-                      <th className="p-2.5">Kota</th>
-                      <th className="p-2.5">Health</th>
-                      <th className="p-2.5">Money / Bank</th>
-                      <th className="p-2.5">Hewan</th>
-                      <th className="p-2.5">Tanaman</th>
-                      <th className="p-2.5">Inventory</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/50">
-                    {rpgPlayers.map((p) => (
-                      <tr key={p.id} className="hover:bg-muted/20">
-                        <td className="p-2.5 font-bold">
-                          {p.nama} <span className="block text-[10px] text-muted-foreground">{p.tag}</span>
-                        </td>
-                        <td className="p-2.5 font-semibold text-primary">{p.kota}</td>
-                        <td className="p-2.5">{p.health} HP</td>
-                        <td className="p-2.5 font-mono text-emerald-500 font-bold">${p.money} / ${p.bank}</td>
-                        <td className="p-2.5">{p.hewan.join(', ')}</td>
-                        <td className="p-2.5">{p.tanaman.join(', ')}</td>
-                        <td className="p-2.5 text-[11px] font-mono">{p.inventory.join(', ')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              </Card>
             </div>
 
             {message && <p className="text-center text-sm font-bold text-primary">{message}</p>}

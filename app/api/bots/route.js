@@ -2,12 +2,6 @@ import { NextResponse } from 'next/server'
 import { getDb, publicBot } from '../../../lib/mongodb'
 import { getCurrentUser } from '../../../lib/auth'
 
-function getAppBaseUrl(request) {
-  const host = request.headers.get('host') || 'localhost:3000'
-  const proto = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https')
-  return `${proto}://${host}`
-}
-
 export async function GET() {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -70,37 +64,15 @@ export async function POST(request) {
     token,
     username: telegramBotInfo.username || null,
     firstName: telegramBotInfo.first_name || null,
-    status: 'pending',
+    status: 'stopped',
+    isRunning: false,
     commands: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
   }
 
   const result = await db.collection('bots').insertOne(botDoc)
-  const botId = result.insertedId.toString()
-  const baseUrl = getAppBaseUrl(request)
-  const webhookUrl = `${baseUrl}/api/telegram/webhook/${botId}`
-
-  // Attempt to set webhook on Telegram
-  let webhookSet = false
-  try {
-    const webhookRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ url: webhookUrl, allowed_updates: ['message', 'edited_message', 'callback_query'] }),
-    })
-    const webhookData = await webhookRes.json()
-    if (webhookData.ok) {
-      webhookSet = true
-    }
-  } catch (err) {
-    console.error('Failed to set Telegram webhook:', err)
-  }
-
-  const finalStatus = webhookSet || telegramBotInfo ? 'connected' : 'pending'
-  await db.collection('bots').updateOne({ _id: result.insertedId }, { $set: { status: finalStatus, webhookUrl } })
-
   return NextResponse.json({
-    bot: publicBot({ ...botDoc, _id: result.insertedId, status: finalStatus, webhookUrl }),
+    bot: publicBot({ ...botDoc, _id: result.insertedId }),
   }, { status: 201 })
 }
