@@ -144,7 +144,7 @@ export default function SettingsPage() {
         })
         const data = await res.json()
         if (res.ok) {
-          setMessage('Konfigurasi bot & Gemini Key berhasil disimpan.')
+          setMessage('Konfigurasi berhasil disimpan.')
           setBots((cur) => cur.map((item) => item.id === selectedBotId ? { ...item, timezone: botTimezone, rpgMode: rpgEnabled, footer: botFooter, delay: botDelay } : item))
         } else {
           setMessage(data.error || 'Gagal menyimpan konfigurasi bot.')
@@ -250,10 +250,10 @@ export default function SettingsPage() {
                     </div>
                     <div className="space-y-1 text-xs">
                       <Link href="/profile" onClick={() => setProfileDropdownOpen(false)} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-medium">
-                        <UserIcon size={14} /> Profile Settings ››
+                        <UserIcon size={14} /> Settings
                       </Link>
                       <button onClick={logout} className="w-full text-left flex items-center gap-2 p-2 rounded hover:bg-destructive/10 text-destructive font-medium">
-                        <LogOut size={14} /> Logout / Sign Out
+                        <LogOut size={14} /> Sign Out
                       </button>
                     </div>
                   </div>
@@ -271,7 +271,7 @@ export default function SettingsPage() {
             {/* Form Bot Target & Settings */}
             <form onSubmit={handleSaveSettings} className="space-y-6 rounded-2xl border border-border bg-card p-6 shadow-xl text-xs">
               <div className="space-y-4">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-primary"><Bot size={16} /> Konfigurasi Target Telegram Bot</h2>
+                <h2 className="flex items-center gap-2 text-sm font-bold text-primary"><Bot size={16} /> Konfigurasi Target</h2>
                 {bots.length === 0 ? (
                   <p className="text-muted-foreground">Belum ada bot terhubung. Tambahkan bot di Dashboard terlebih dahulu.</p>
                 ) : (
@@ -295,17 +295,17 @@ export default function SettingsPage() {
 
                     <label className="flex items-center gap-3 rounded-lg border border-border p-3">
                       <input type="checkbox" checked={rpgEnabled} onChange={(e) => setRpgEnabled(e.target.checked)} />
-                      <span className="font-semibold">Aktifkan Engine RPG Telegram (/rpg, /hunt, /daily, /inventory, /farm, /work)</span>
+                      <span className="font-semibold">Aktifkan Engine Role Playing Game (RPG).</span>
                     </label>
 
-                    <label className="block font-semibold">Bot Footer Reply Text
+                    <label className="block font-semibold">Footer
                       <textarea value={botFooter} onChange={(e) => setBotFooter(e.target.value)} rows={2} placeholder="Powered by Dann-Tele Gateway" className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
                     </label>
 
                     {/* Gemini API Key Field */}
                     <div className="p-3 border border-border rounded-xl bg-muted/30 space-y-2">
                       <label className="font-bold flex items-center gap-2 text-primary text-xs">
-                        <Sparkles size={14} /> Google Gemini API Key Config (Modul @google/genai)
+                        <Sparkles size={14} /> Google Gemini Apikey
                       </label>
                       <input
                         type="password"
@@ -318,7 +318,7 @@ export default function SettingsPage() {
                     </div>
 
                     <button type="submit" disabled={saving} className="primary-button">
-                      {saving ? <PuzzleSpinner size="sm" /> : <><Save size={14} /> Simpan Konfigurasi Bot & Gemini Key</>}
+                      {saving ? <PuzzleSpinner size="sm" /> : <><Save size={14} /> Simpan</>}
                     </button>
                   </>
                 )}
