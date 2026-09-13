@@ -284,7 +284,32 @@ export async function POST(request, { params }) {
     const decors = Array.isArray(customCmd.decorations) && customCmd.decorations.length > 0 ? customCmd.decorations.join(' ') + ' ' : ''
 
     if (customCmd.aiSessionMode) {
-      finalResponse = `${decors}<b>[Gemini AI Response]</b>\nHello @${senderUsername}, I am your AI assistant handling command <code>${cmdClean}</code>. ${queryParam ? `Query: ${html(queryParam)}` : ''}`
+      // Find Gemini API Key from bot or user doc
+      const ownerUser = await db.collection('users').findOne({ _id: new ObjectId(bot.userId) }) || await db.collection('user').findOne({ id: bot.userId })
+      const geminiApiKey = bot.geminiApiKey || ownerUser?.geminiApiKey || process.env.GEMINI_API_KEY
+
+      if (!geminiApiKey) {
+        finalResponse = `${decors}⚠️ <b>Gemini AI Config:</b> Silakan masukkan Gemini API Key di menu <b>Settings / AI Session</b> dashboard.`
+      } else {
+        try {
+          const { GoogleGenAI } = await import('@google/genai')
+          const ai = new GoogleGenAI({ apiKey: geminiApiKey })
+          const modelName = customCmd.aiModel || bot.aiModel || 'gemini-2.5-flash'
+          const promptContext = customCmd.aiContext || bot.aiContext || 'Kamu adalah asisten Telegram AI yang cerdas, ramah, dan membantu.'
+          const fullPrompt = `${promptContext}\n\nPengguna @${senderUsername} berkata: ${queryParam || text}`
+
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: fullPrompt,
+          })
+
+          const aiText = response.text || 'Tidak ada respon dari Gemini AI.'
+          finalResponse = `${decors}✨ <b>[Gemini AI Response]</b>\n${html(aiText)}`
+        } catch (err) {
+          console.error('[Gemini AI Error]', err)
+          finalResponse = `${decors}⚠️ <b>Gemini AI Error:</b> ${html(err.message || 'Gagal menghasilkan respon AI.')}`
+        }
+      }
     } else {
       finalResponse = decors + renderTemplate(customCmd.response || 'Command executed.', message, bot)
     }

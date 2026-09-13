@@ -12,6 +12,7 @@
     "@fortawesome/fontawesome-svg-core": "^7.3.1",
     "@fortawesome/free-brands-svg-icons": "^7.3.1",
     "@fortawesome/react-fontawesome": "^3.5.0",
+    "@google/genai": "^2.22.0",
     "@vercel/analytics": "1.6.1",
     "@vercel/blob": "^2.8.0",
     "bcryptjs": "^3.0.3",
