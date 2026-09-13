@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  Settings as SettingsIcon, Bot, Shield, Save, Download, LayoutDashboard, Command, List, LogOut, Menu, Moon, Sun, ChevronDown, User as UserIcon, Send, Clock, UserPlus, Zap, Database
+  Settings as SettingsIcon, Bot, Shield, Save, Download, LayoutDashboard, Command, List, LogOut, Menu, Moon, Sun, ChevronDown, User as UserIcon, Send, Clock, UserPlus, Zap, Database, Sparkles, Key
 } from 'lucide-react'
 import { PuzzleSpinner } from '@/components/ui/puzzle-spinner'
 
@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const [rpgEnabled, setRpgEnabled] = useState(false)
   const [botFooter, setBotFooter] = useState('')
   const [botDelay, setBotDelay] = useState(0)
+  const [geminiApiKey, setGeminiApiKey] = useState('')
 
   // Bot Owner/Role & Limit Configuration
   const [newOwnerId, setNewOwnerId] = useState('')
@@ -81,6 +82,7 @@ export default function SettingsPage() {
         if (meRes.ok) {
           const meData = await meRes.json()
           setUser(meData.user)
+          if (meData.user?.geminiApiKey) setGeminiApiKey(meData.user.geminiApiKey)
         }
         if (botsRes.ok) {
           const botsData = await botsRes.json()
@@ -123,21 +125,32 @@ export default function SettingsPage() {
 
   async function handleSaveSettings(e: React.FormEvent) {
     e.preventDefault()
-    if (!selectedBotId) return
     setSaving(true)
     setMessage('')
     try {
-      const res = await fetch(`/api/bots/${selectedBotId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ timezone: botTimezone, rpgMode: rpgEnabled, footer: botFooter, delay: botDelay }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setMessage('Bot settings saved successfully.')
-        setBots((cur) => cur.map((item) => item.id === selectedBotId ? { ...item, timezone: botTimezone, rpgMode: rpgEnabled, footer: botFooter, delay: botDelay } : item))
+      if (geminiApiKey) {
+        await fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ geminiApiKey }),
+        })
+      }
+
+      if (selectedBotId) {
+        const res = await fetch(`/api/bots/${selectedBotId}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ timezone: botTimezone, rpgMode: rpgEnabled, footer: botFooter, delay: botDelay, geminiApiKey }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          setMessage('Konfigurasi bot & Gemini Key berhasil disimpan.')
+          setBots((cur) => cur.map((item) => item.id === selectedBotId ? { ...item, timezone: botTimezone, rpgMode: rpgEnabled, footer: botFooter, delay: botDelay } : item))
+        } else {
+          setMessage(data.error || 'Gagal menyimpan konfigurasi bot.')
+        }
       } else {
-        setMessage(data.error || 'Failed to update bot settings.')
+        setMessage('Gemini API Key berhasil diperbarui.')
       }
     } finally {
       setSaving(false)
@@ -289,8 +302,23 @@ export default function SettingsPage() {
                       <textarea value={botFooter} onChange={(e) => setBotFooter(e.target.value)} rows={2} placeholder="Powered by Dann-Tele Gateway" className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
                     </label>
 
+                    {/* Gemini API Key Field */}
+                    <div className="p-3 border border-border rounded-xl bg-muted/30 space-y-2">
+                      <label className="font-bold flex items-center gap-2 text-primary text-xs">
+                        <Sparkles size={14} /> Google Gemini API Key Config (Modul @google/genai)
+                      </label>
+                      <input
+                        type="password"
+                        value={geminiApiKey}
+                        onChange={(e) => setGeminiApiKey(e.target.value)}
+                        placeholder="AIzaSy..."
+                        className="w-full p-2.5 rounded border border-input bg-background font-mono"
+                      />
+                      <p className="text-[11px] text-muted-foreground">Masukkan Gemini API Key agar bot secara otomatis dapat merespon pesan/command AI.</p>
+                    </div>
+
                     <button type="submit" disabled={saving} className="primary-button">
-                      {saving ? <PuzzleSpinner size="sm" /> : <><Save size={14} /> Simpan Konfigurasi Bot</>}
+                      {saving ? <PuzzleSpinner size="sm" /> : <><Save size={14} /> Simpan Konfigurasi Bot & Gemini Key</>}
                     </button>
                   </>
                 )}

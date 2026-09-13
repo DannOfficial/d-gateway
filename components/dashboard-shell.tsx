@@ -89,10 +89,12 @@ export default function DashboardShell() {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
 
-  // AI Sessions State
+  // AI Sessions State & API Key input
+  const [geminiApiKeyInput, setGeminiApiKeyInput] = useState('')
+  const [savingApiKey, setSavingApiKey] = useState(false)
   const [aiSessions, setAiSessions] = useState<Array<{ id: string; name: string; context: string; model: string }>>([
-    { id: '1', name: 'Gemini Assistant General', context: 'Kamu adalah asisten pintar buatan Dann-Tele.', model: 'gemini-1.5-flash' },
-    { id: '2', name: 'RPG Companion AI', context: 'Kamu adalah NPC pemandu petualangan RPG yang ramah dan membantu player.', model: 'gemini-1.5-pro' },
+    { id: '1', name: 'Gemini Assistant General', context: 'Kamu adalah asisten pintar buatan Dann-Tele.', model: 'gemini-2.5-flash' },
+    { id: '2', name: 'RPG Companion AI', context: 'Kamu adalah NPC pemandu petualangan RPG yang ramah dan membantu player.', model: 'gemini-2.5-flash' },
   ])
   const [newAiSessionName, setNewAiSessionName] = useState('')
   const [newAiSessionContext, setNewAiSessionContext] = useState('')
@@ -111,6 +113,7 @@ export default function DashboardShell() {
       if (meRes.ok) {
         const userData = await meRes.json()
         setUser(userData.user)
+        if (userData.user?.geminiApiKey) setGeminiApiKeyInput(userData.user.geminiApiKey)
         if (userData.user?.twoFactorEnabled && !sessionStorage.getItem('dann_2fa_ok')) {
           setPinVerified(false)
           setPinDialog(true)
@@ -776,11 +779,43 @@ export default function DashboardShell() {
 
             {/* AI SESSIONS TAB */}
             {activeTab === 'session' && (
-              <section className="panel my-6 p-6 rounded-2xl border border-border bg-card space-y-4">
-                <div className="flex items-center gap-2 text-primary font-bold"><Sparkles size={20} /> Gemini AI Session Context Manager</div>
-                <p className="text-xs text-muted-foreground">Buat dan atur konteks instruksi AI Gemini agar bot Telegram merespon secara otomatis sesuai dengan kepribadian/fitur yang diinginkan.</p>
+              <section className="panel my-6 p-6 rounded-2xl border border-border bg-card space-y-6">
+                <div>
+                  <div className="flex items-center gap-2 text-primary font-bold text-lg"><Sparkles size={22} /> Google Gemini AI Session Manager</div>
+                  <p className="text-xs text-muted-foreground mt-1">Input Gemini API Key milik Anda dari Google AI Studio, lalu simpan agar fitur AI bekerja otomatis pada Telegram bot.</p>
+                </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                {/* API Key Input Section */}
+                <div className="p-4 rounded-xl border border-border bg-background space-y-3">
+                  <label className="block text-xs font-bold text-primary">Gemini API Key (Module @google/genai)
+                    <input
+                      type="password"
+                      value={geminiApiKeyInput}
+                      onChange={(e) => setGeminiApiKeyInput(e.target.value)}
+                      placeholder="AIzaSy..."
+                      className="mt-1 w-full p-2.5 text-xs rounded-lg border border-input bg-card font-mono"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={savingApiKey}
+                    onClick={async () => {
+                      setSavingApiKey(true)
+                      await fetch('/api/profile', {
+                        method: 'POST',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({ geminiApiKey: geminiApiKeyInput }),
+                      })
+                      setSavingApiKey(false)
+                      alert('Gemini API Key berhasil disimpan!')
+                    }}
+                    className="primary-button compact"
+                  >
+                    {savingApiKey ? <PuzzleSpinner size="sm" /> : 'Simpan Gemini API Key →'}
+                  </button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 text-xs">
                   {aiSessions.map((sess) => (
                     <div key={sess.id} className="p-4 rounded-xl border border-border bg-background space-y-2">
                       <div className="flex items-center justify-between">
@@ -792,36 +827,34 @@ export default function DashboardShell() {
                   ))}
                 </div>
 
-                <div className="mt-6 border-t border-border pt-4">
-                  <h3 className="text-sm font-bold mb-2">+ Tambah Session Context Baru</h3>
-                  <div className="space-y-3">
-                    <input
-                      value={newAiSessionName}
-                      onChange={(e) => setNewAiSessionName(e.target.value)}
-                      placeholder="Nama Session Context (e.g. Asisten Toko Online)"
-                      className="w-full p-2.5 text-xs rounded-lg border border-input bg-background"
-                    />
-                    <textarea
-                      value={newAiSessionContext}
-                      onChange={(e) => setNewAiSessionContext(e.target.value)}
-                      rows={3}
-                      placeholder="Instruksi / Prompt Konteks (e.g. Kamu adalah asisten ramah penanggung jawab customer care...)"
-                      className="w-full p-2.5 text-xs rounded-lg border border-input bg-background"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (newAiSessionName.trim()) {
-                          setAiSessions([...aiSessions, { id: String(Date.now()), name: newAiSessionName, context: newAiSessionContext, model: 'gemini-1.5-flash' }])
-                          setNewAiSessionName('')
-                          setNewAiSessionContext('')
-                        }
-                      }}
-                      className="primary-button compact"
-                    >
-                      Simpan AI Session Context
-                    </button>
-                  </div>
+                <div className="border-t border-border pt-4 space-y-3 text-xs">
+                  <h3 className="text-sm font-bold">+ Tambah Prompt Session Context Baru</h3>
+                  <input
+                    value={newAiSessionName}
+                    onChange={(e) => setNewAiSessionName(e.target.value)}
+                    placeholder="Nama Session Context (e.g. Customer Support AI)"
+                    className="w-full p-2.5 rounded-lg border border-input bg-background"
+                  />
+                  <textarea
+                    value={newAiSessionContext}
+                    onChange={(e) => setNewAiSessionContext(e.target.value)}
+                    rows={3}
+                    placeholder="Instruksi / System Prompt (e.g. Kamu adalah asisten penanggung jawab toko online...)"
+                    className="w-full p-2.5 rounded-lg border border-input bg-background"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newAiSessionName.trim()) {
+                        setAiSessions([...aiSessions, { id: String(Date.now()), name: newAiSessionName, context: newAiSessionContext, model: 'gemini-2.5-flash' }])
+                        setNewAiSessionName('')
+                        setNewAiSessionContext('')
+                      }
+                    }}
+                    className="primary-button compact"
+                  >
+                    Tambah Session Context
+                  </button>
                 </div>
               </section>
             )}

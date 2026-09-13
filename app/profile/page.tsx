@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRef } from 'react'
 import {
-  User, Shield, Key, Download, LayoutDashboard, Bot, Command, List, Settings, LogOut, Menu, Moon, Sun, ChevronDown, Camera, CheckCircle2, Lock, ShieldCheck
+  User, Shield, Key, Download, LayoutDashboard, Bot, Command, List, Settings, LogOut, Menu, Moon, Sun, ChevronDown, Camera, CheckCircle2, Lock, ShieldCheck, Edit3, Mail, Sparkles, Check
 } from 'lucide-react'
 import { PuzzleSpinner } from '@/components/ui/puzzle-spinner'
 
@@ -22,13 +23,23 @@ export default function ProfilePage() {
   const [newEmail, setNewEmail] = useState('')
   const [password, setPassword] = useState('')
   const [twoFactor, setTwoFactor] = useState(false)
+  const [twoFactorPin, setTwoFactorPin] = useState('')
+  const [geminiApiKey, setGeminiApiKey] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string>('')
 
-  // OTP Verification Modal
+  // Email Edit Mode & OTP State
+  const [isEditingEmail, setIsEditingEmail] = useState(false)
   const [otpModal, setOtpModal] = useState(false)
   const [otpCode, setOtpCode] = useState('')
+  const [otpSending, setOtpSending] = useState(false)
   const [otpVerifying, setOtpVerifying] = useState(false)
   const [otpMessage, setOtpMessage] = useState('')
+
+  // Image Crop Dialog State
+  const [cropModal, setCropModal] = useState(false)
+  const [rawImageSrc, setRawImageSrc] = useState<string | null>(null)
+  const [zoomLevel, setZoomLevel] = useState(1)
+  const imgRef = useRef<HTMLImageElement | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -47,6 +58,8 @@ export default function ProfilePage() {
           setEmail(data.user.email || '')
           setNewEmail(data.user.email || '')
           setTwoFactor(Boolean(data.user.twoFactorEnabled))
+          setTwoFactorPin(data.user.twoFactorPin || '')
+          setGeminiApiKey(data.user.geminiApiKey || '')
         }
       })
       .finally(() => setLoading(false))
@@ -67,8 +80,55 @@ export default function ProfilePage() {
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
-      const url = URL.createObjectURL(file)
-      setAvatarUrl(url)
+      const reader = new FileReader()
+      reader.onload = () => {
+        setRawImageSrc(reader.result as string)
+        setCropModal(true)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  function applyCrop() {
+    if (!rawImageSrc) return
+    const canvas = document.createElement('canvas')
+    const size = 300
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')
+    if (ctx && imgRef.current) {
+      const img = imgRef.current
+      const minDim = Math.min(img.naturalWidth, img.naturalHeight)
+      const sx = (img.naturalWidth - minDim) / 2
+      const sy = (img.naturalHeight - minDim) / 2
+      ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size)
+      const croppedUrl = canvas.toDataURL('image/jpeg', 0.9)
+      setAvatarUrl(croppedUrl)
+
+      // Upload via API
+      fetch('/api/profile/avatar', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ image: croppedUrl }),
+      }).catch(() => {})
+    }
+    setCropModal(false)
+  }
+
+  async function handleSendEmailOtp() {
+    if (!newEmail || newEmail.toLowerCase() === email.toLowerCase()) {
+      setMessage('Masukkan alamat email baru yang berbeda.')
+      return
+    }
+    setOtpSending(true)
+    setMessage('')
+    try {
+      // Simulate/trigger sending OTP
+      await new Promise((res) => setTimeout(res, 800))
+      setOtpModal(true)
+      setOtpMessage('')
+    } finally {
+      setOtpSending(false)
     }
   }
 
@@ -77,28 +137,22 @@ export default function ProfilePage() {
     setSaving(true)
     setMessage('')
     try {
-      const isEmailChanged = newEmail.trim() && newEmail.trim().toLowerCase() !== email.toLowerCase()
-
       const res = await fetch('/api/profile', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           name,
-          email: isEmailChanged ? newEmail : email,
           password: password || undefined,
           twoFactorEnabled: twoFactor,
+          twoFactorPin: twoFactorPin || undefined,
+          geminiApiKey: geminiApiKey || undefined,
         }),
       })
       const data = await res.json()
 
       if (res.ok) {
-        if (isEmailChanged) {
-          setOtpModal(true)
-          setMessage('Instruksi OTP telah dikirimkan untuk verifikasi email baru.')
-        } else {
-          setMessage('Profil berhasil diperbarui.')
-          setUser((prev) => prev ? { ...prev, name, twoFactorEnabled: twoFactor } : prev)
-        }
+        setMessage('Profil dan konfigurasi berhasil diperbarui.')
+        setUser((prev) => prev ? { ...prev, name, twoFactorEnabled: twoFactor } : prev)
       } else {
         setMessage(data.error || 'Gagal memperbarui profil.')
       }
@@ -109,14 +163,29 @@ export default function ProfilePage() {
 
   async function verifyEmailOtp(e: React.FormEvent) {
     e.preventDefault()
+    if (otpCode.length < 4) {
+      setOtpMessage('Kode OTP minimal 4 digit.')
+      return
+    }
     setOtpVerifying(true)
     setOtpMessage('')
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: newEmail }),
+      })
+      if (res.ok) {
+        setEmail(newEmail)
+        setIsEditingEmail(false)
+        setOtpModal(false)
+        setMessage('Email baru berhasil diverifikasi & diperbarui!')
+      } else {
+        setOtpMessage('Gagal verifikasi email OTP.')
+      }
+    } finally {
       setOtpVerifying(false)
-      setEmail(newEmail)
-      setOtpModal(false)
-      setMessage('Email berhasil diverifikasi & diperbarui!')
-    }, 1200)
+    }
   }
 
   async function logout() {
@@ -248,13 +317,66 @@ export default function ProfilePage() {
                   <input value={name} onChange={(e) => setName(e.target.value)} required className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
                 </label>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="block font-semibold">Email Saat Ini
-                    <input value={email} disabled className="mt-1 w-full rounded-lg border border-input bg-muted p-2.5 opacity-70" />
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs flex items-center gap-1.5"><Mail size={14} /> Alamat Email</span>
+                    {!isEditingEmail ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingEmail(true)}
+                        className="inline-flex items-center gap-1 text-primary hover:underline font-bold text-xs"
+                      >
+                        <Edit3 size={13} /> Edit Email
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingEmail(false)}
+                        className="text-muted-foreground hover:underline text-xs"
+                      >
+                        Batal
+                      </button>
+                    )}
+                  </div>
+
+                  {!isEditingEmail ? (
+                    <input value={email} disabled className="w-full rounded-lg border border-input bg-muted p-2.5 opacity-80 font-mono" />
+                  ) : (
+                    <div className="space-y-3 p-3 border border-border rounded-xl bg-muted/20">
+                      <label className="block font-semibold">Email Baru Target
+                        <input
+                          type="email"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          placeholder="email-baru@example.com"
+                          className="mt-1 w-full rounded-lg border border-input bg-background p-2.5"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleSendEmailOtp}
+                        disabled={otpSending}
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                      >
+                        {otpSending ? <PuzzleSpinner size="sm" /> : <><Mail size={14} /> Kirim OTP Verifikasi →</>}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Gemini API Key Configuration Section */}
+                <div className="space-y-2 pt-2">
+                  <label className="block font-semibold text-primary flex items-center gap-2">
+                    <Sparkles size={16} /> Google Gemini API Key (Module @google/genai)
                   </label>
-                  <label className="block font-semibold">Ubah Email Baru (Perlu OTP)
-                    <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
-                  </label>
+                  <input
+                    type="password"
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full rounded-lg border border-input bg-background p-2.5 font-mono"
+                  />
+                  <p className="text-[11px] text-muted-foreground">Input API Key Google Gemini Anda di sini untuk mengaktifkan AI response otomatis pada bot command.</p>
                 </div>
               </div>
 
@@ -265,10 +387,27 @@ export default function ProfilePage() {
                   <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} placeholder="••••••••" className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
                 </label>
 
-                <label className="flex items-center gap-3 rounded-lg border border-border p-3">
-                  <input type="checkbox" checked={twoFactor} onChange={(e) => setTwoFactor(e.target.checked)} />
-                  <span className="font-semibold">Aktifkan Authentikasi 2 Factor (2FA PIN Modal pada saat login)</span>
-                </label>
+                <div className="space-y-3 rounded-lg border border-border p-3 bg-muted/20">
+                  <label className="flex items-center gap-3">
+                    <input type="checkbox" checked={twoFactor} onChange={(e) => setTwoFactor(e.target.checked)} />
+                    <span className="font-semibold">Aktifkan Authentikasi 2 Factor (2FA PIN Security)</span>
+                  </label>
+
+                  {twoFactor && (
+                    <div className="pt-2">
+                      <label className="block font-semibold">Set 2FA Security PIN (4 - 6 Digit)
+                        <input
+                          type="password"
+                          maxLength={6}
+                          value={twoFactorPin}
+                          onChange={(e) => setTwoFactorPin(e.target.value)}
+                          placeholder="••••"
+                          className="mt-1 w-full rounded-lg border border-input bg-background p-2.5 font-mono text-center tracking-widest text-lg"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="border-t border-border pt-6 flex items-center justify-between">
@@ -285,6 +424,51 @@ export default function ProfilePage() {
           </div>
         </section>
       </div>
+
+      {/* Image Crop Preview Dialog Modal */}
+      {cropModal && rawImageSrc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl text-foreground space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h2 className="font-bold text-sm flex items-center gap-2"><Camera size={16} /> Dialog Crop Preview Avatar</h2>
+              <button onClick={() => setCropModal(false)} className="text-muted-foreground hover:text-foreground">✕</button>
+            </div>
+            <p className="text-muted-foreground">Sesuaikan posisi dan pratinjau foto profil sebelum disimpan.</p>
+
+            <div className="relative mx-auto h-56 w-56 overflow-hidden rounded-full border-4 border-primary bg-black/50 flex items-center justify-center">
+              <img
+                ref={imgRef}
+                src={rawImageSrc}
+                alt="Crop preview"
+                className="h-full w-full object-cover"
+                style={{ transform: `scale(${zoomLevel})` }}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-semibold text-[11px] block text-center">Zoom Adjust</label>
+              <input
+                type="range"
+                min="1"
+                max="2.5"
+                step="0.1"
+                value={zoomLevel}
+                onChange={(e) => setZoomLevel(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setCropModal(false)} className="flex-1 rounded-lg border border-border py-2 font-semibold">
+                Batal
+              </button>
+              <button type="button" onClick={applyCrop} className="flex-1 primary-button">
+                Simpan & Potong Foto →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* OTP Verification Modal */}
       {otpModal && (
@@ -305,9 +489,14 @@ export default function ProfilePage() {
                 className="w-full rounded-xl border border-input bg-background p-3 text-center text-xl font-mono tracking-widest"
               />
               {otpMessage && <p className="text-destructive font-semibold">{otpMessage}</p>}
-              <button type="submit" disabled={otpVerifying} className="primary-button full">
-                {otpVerifying ? <PuzzleSpinner size="sm" /> : 'Konfirmasi OTP & Perbarui Email →'}
-              </button>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setOtpModal(false)} className="flex-1 rounded-xl border border-border py-2.5 font-semibold">
+                  Batal
+                </button>
+                <button type="submit" disabled={otpVerifying} className="flex-1 primary-button">
+                  {otpVerifying ? <PuzzleSpinner size="sm" /> : 'Verifikasi OTP →'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

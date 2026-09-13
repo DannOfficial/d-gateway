@@ -9,7 +9,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json()
-    const { surveySource, name, email, password, twoFactorEnabled } = body
+    const { surveySource, name, email, password, twoFactorEnabled, twoFactorPin, geminiApiKey } = body
 
     const updateDoc = { updatedAt: new Date() }
     if (typeof surveySource === 'string') {
@@ -24,6 +24,8 @@ export async function POST(request) {
     }
     if (typeof password === 'string' && password.length >= 8) updateDoc.password = await bcrypt.hash(password, 12)
     if (typeof twoFactorEnabled === 'boolean') updateDoc.twoFactorEnabled = twoFactorEnabled
+    if (typeof twoFactorPin === 'string') updateDoc.twoFactorPin = twoFactorPin.trim()
+    if (typeof geminiApiKey === 'string') updateDoc.geminiApiKey = geminiApiKey.trim()
 
     const db = await getDb()
     const uId = user._id ? user._id : user.id
