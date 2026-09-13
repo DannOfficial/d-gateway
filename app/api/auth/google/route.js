@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { getDb } from '../../../../lib/mongodb'
 
-const GOOGLE_CLIENT_ID = '899798992534-73pn5dcs69udjqoh5okiqv3tgl59aopq.apps.googleusercontent.com'
-const GOOGLE_CLIENT_SECRET = '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'
-const BASE_URL = 'https://dannteam.biz.id'
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
+const BASE_URL = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
 export async function GET(request) {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return NextResponse.redirect(`${BASE_URL}/login?error=oauth_not_configured`)
+  }
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
 

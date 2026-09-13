@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { ObjectId } from 'mongodb'
-import { getDb } from '@/lib/mongodb'
+import { getDb, publicBot } from '@/lib/mongodb'
 import { getCurrentUser } from '@/lib/auth'
 
 function getAppBaseUrl(request: Request) {
@@ -35,11 +35,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ bot
   const webhookUrl = `${appBaseUrl}/api/telegram/webhook/${bot._id.toString()}`
 
   try {
+    await db.collection('bots').updateOne({ _id: bot._id }, { $set: { status: 'starting', error: null, updatedAt: new Date() } })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8000)
     const tgRes = await fetch(`https://api.telegram.org/bot${bot.token}/setWebhook`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ url: webhookUrl, allowed_updates: ['message', 'edited_message', 'callback_query'] }),
-    })
+      body: JSON.stringify({
+        url: webhookUrl,
+        secret_token: bot.webhookSecret,
+        allowed_updates: ['message', 'edited_message', 'callback_query'],
+      }),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout))
     const tgData = await tgRes.json()
 
     if (!tgRes.ok || !tgData.ok) {
@@ -55,11 +63,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ bot
 
     await db.collection('bots').updateOne(
       { _id: bot._id },
-      { $set: { status: 'running', isRunning: true, updatedAt: new Date() } }
+      { $set: { status: 'running', isRunning: true, webhookUrl, updatedAt: new Date() } }
     )
 
     const updatedBot = await db.collection('bots').findOne({ _id: bot._id })
-    return NextResponse.json({ ok: true, message: 'Bot started successfully', bot: updatedBot })
+    return NextResponse.json({ ok: true, message: 'Bot started successfully', bot: publicBot(updatedBot) })
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message || 'Internal Server Error' }, { status: 500 })
   }

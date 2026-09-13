@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb, publicBot } from '../../../lib/mongodb'
 import { getCurrentUser } from '../../../lib/auth'
+import { randomBytes } from 'node:crypto'
 
 export async function GET() {
   const user = await getCurrentUser()
@@ -66,6 +67,7 @@ export async function POST(request) {
     firstName: telegramBotInfo.first_name || null,
     status: 'stopped',
     isRunning: false,
+    webhookSecret: randomBytes(32).toString('hex'),
     commands: 0,
     createdAt: new Date(),
     updatedAt: new Date(),

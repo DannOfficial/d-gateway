@@ -57,10 +57,20 @@ export async function POST(request) {
     const formattedCmd = normalizedCmd.startsWith('/') ? normalizedCmd : `/${normalizedCmd}`
 
     const db = await getDb()
+    let ownedBotId = null
+    if (botId) {
+      if (!ObjectId.isValid(botId)) return NextResponse.json({ error: 'Invalid bot ID.' }, { status: 400 })
+      const ownedBot = await db.collection('bots').findOne(
+        { _id: new ObjectId(botId), userId: user._id },
+        { projection: { _id: 1 } }
+      )
+      if (!ownedBot) return NextResponse.json({ error: 'You do not own this bot.' }, { status: 403 })
+      ownedBotId = ownedBot._id
+    }
 
     const doc = {
       userId: user._id,
-      botId: botId && ObjectId.isValid(botId) ? new ObjectId(botId) : null,
+      botId: ownedBotId,
       command: formattedCmd,
       response: String(response || '').trim(),
       decorations: Array.isArray(decorations) ? decorations.map(String) : [],
@@ -77,7 +87,8 @@ export async function POST(request) {
     }
 
     if (id && ObjectId.isValid(id)) {
-      await db.collection('commands').updateOne({ _id: new ObjectId(id), userId: user._id }, { $set: doc })
+      const result = await db.collection('commands').updateOne({ _id: new ObjectId(id), userId: user._id }, { $set: doc })
+      if (!result.matchedCount) return NextResponse.json({ error: 'Command not found.' }, { status: 404 })
       return NextResponse.json({ ok: true, id })
     } else {
       doc.createdAt = new Date()
