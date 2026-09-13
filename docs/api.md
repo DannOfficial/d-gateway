@@ -18,6 +18,7 @@ All protected requests use the Better Auth session cookie. Never send Telegram b
 - `DELETE /api/bots/:botId` — delete an owned bot and its logs.
 - `POST /api/bots/validate` — validate an owned bot against Telegram `getMe`.
 - `POST /api/telegram/webhook/:botId` — Telegram webhook receiver.
+  Webhooks are accepted only when Telegram sends the per-bot `X-Telegram-Bot-Api-Secret-Token` header configured by the start lifecycle endpoint.
 
 ## Profile and media
 
@@ -30,4 +31,4 @@ All protected requests use the Better Auth session cookie. Never send Telegram b
 
 ## Security notes
 
-All user-owned queries must scope by the Better Auth user id. Telegram tokens are stored server-side only. OAuth secrets, Resend keys, and Blob tokens must remain server environment variables.
+All user-owned queries must scope by the Better Auth user id. Telegram tokens and webhook secrets are stored server-side only. OAuth secrets, Resend keys, and Blob tokens must remain server environment variables. New bots start stopped and must be explicitly started before updates are processed.

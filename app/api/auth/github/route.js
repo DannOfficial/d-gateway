@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { getDb } from '../../../../lib/mongodb'
 
-const GITHUB_CLIENT_ID = 'Ov23li7cmDcy2xVYxMjj'
-const GITHUB_CLIENT_SECRET = '5561027dca8714ac38cb97eb5c53e8a6de9f0900'
-const BASE_URL = 'https://dannteam.biz.id'
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET
+const BASE_URL = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
 export async function GET(request) {
+  if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+    return NextResponse.redirect(`${BASE_URL}/login?error=oauth_not_configured`)
+  }
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
 

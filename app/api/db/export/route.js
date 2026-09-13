@@ -11,6 +11,8 @@ export async function GET() {
   const commands = await db.collection('commands').find({ userId: user._id }).toArray()
   const logs = await db.collection('logs').find({ userId: user._id }).limit(100).toArray()
 
+  const safeBots = bots.map(({ token, webhookSecret, geminiApiKey, ...bot }) => bot)
+  const safeCommands = commands.map(({ apiKey, ...command }) => command)
   const exportData = {
     user: {
       name: user.name,
@@ -18,8 +20,8 @@ export async function GET() {
       role: user.role,
       plan: user.plan,
     },
-    bots,
-    commands,
+    bots: safeBots,
+    commands: safeCommands,
     logs,
     exportedAt: new Date().toISOString(),
   }

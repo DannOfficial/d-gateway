@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { ObjectId } from 'mongodb'
-import { getDb } from '@/lib/mongodb'
+import { getDb, publicBot } from '@/lib/mongodb'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function POST(request: Request, { params }: { params: Promise<{ botId: string }> }) {
@@ -26,11 +26,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ bot
   }
 
   try {
-    await fetch(`https://api.telegram.org/bot${bot.token}/deleteWebhook`, {
+    await db.collection('bots').updateOne({ _id: bot._id }, { $set: { status: 'stopping', updatedAt: new Date() } })
+    const tgRes = await fetch(`https://api.telegram.org/bot${bot.token}/deleteWebhook`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ drop_pending_updates: true }),
-    }).catch(() => {})
+    })
+    const tgData = await tgRes.json().catch(() => ({}))
+    if (!tgRes.ok || !tgData.ok) {
+      await db.collection('bots').updateOne({ _id: bot._id }, { $set: { status: 'error', error: tgData.description || 'Failed to remove webhook', updatedAt: new Date() } })
+      return NextResponse.json({ ok: false, error: tgData.description || 'Failed to remove webhook' }, { status: 502 })
+    }
 
     await db.collection('bots').updateOne(
       { _id: bot._id },
@@ -38,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bot
     )
 
     const updatedBot = await db.collection('bots').findOne({ _id: bot._id })
-    return NextResponse.json({ ok: true, message: 'Bot stopped successfully', bot: updatedBot })
+    return NextResponse.json({ ok: true, message: 'Bot stopped successfully', bot: publicBot(updatedBot) })
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message || 'Internal Server Error' }, { status: 500 })
   }

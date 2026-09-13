@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ObjectId } from 'mongodb'
 import { getDb } from '../../../../../lib/mongodb'
+import { safeFetch } from '../../../../../lib/safe-fetch'
 
 function html(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -117,6 +118,11 @@ export async function POST(request, { params }) {
     return NextResponse.json({ ok: false, error: 'Bot not found' }, { status: 404 })
   }
 
+  const webhookSecret = request.headers.get('x-telegram-bot-api-secret-token')
+  if (!bot.webhookSecret || webhookSecret !== bot.webhookSecret) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized webhook' }, { status: 401 })
+  }
+
   // STOPPED BOT CHECK: Do not process if bot status is stopped
   if (bot.status === 'stopped' || bot.status === 'inactive' || bot.isRunning === false) {
     return NextResponse.json({ ok: true, message: 'Bot is stopped' })
@@ -132,11 +138,12 @@ export async function POST(request, { params }) {
   // TELEGRAM UPDATE DEDUPLICATION based on update_id
   if (update.update_id) {
     const dupKey = `upd:${bot._id}:${update.update_id}`
-    const existing = await db.collection('processed_updates').findOne({ _id: dupKey })
-    if (existing) {
-      return NextResponse.json({ ok: true, message: 'Duplicate update ignored' })
+    try {
+      await db.collection('processed_updates').insertOne({ _id: dupKey, createdAt: new Date() })
+    } catch (error) {
+      if (error?.code === 11000) return NextResponse.json({ ok: true, message: 'Duplicate update ignored' })
+      throw error
     }
-    await db.collection('processed_updates').insertOne({ _id: dupKey, createdAt: new Date() }).catch(() => {})
   }
 
   // Handle Dynamic Inline Callback Query
@@ -270,10 +277,7 @@ export async function POST(request, { params }) {
   }
 
   // Check Custom Commands
-  const customCmd = await db.collection('commands').findOne({
-    $or: [{ botId: bot._id }, { userId: bot.userId }],
-    command: cmdClean,
-  })
+  const customCmd = await db.collection('commands').findOne({ botId: bot._id, command: cmdClean })
 
   if (customCmd) {
     const roleRanks = { user: 0, admin: 1, superadmin: 2, owner: 3 }
@@ -332,7 +336,8 @@ export async function POST(request, { params }) {
         finalResponse = `${decors}⚠️ <b>SSRF Protection:</b> Endpoint URL internal/private tidak diizinkan.`
       } else {
         try {
-          const apiRes = await fetch(customCmd.apiEndpoint)
+          const apiRes = await safeFetch(customCmd.apiEndpoint, {}, { timeoutMs: 5000, maxBytes: 512 * 1024 })
+          if (!apiRes.ok) throw new Error(`Remote API returned ${apiRes.status}`)
           const apiData = await apiRes.json()
           finalResponse = `${decors}✨ <b>[API Result]</b>\n<pre>${html(JSON.stringify(apiData, null, 2))}</pre>`
         } catch (err) {

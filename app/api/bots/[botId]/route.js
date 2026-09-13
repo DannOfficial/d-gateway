@@ -84,10 +84,13 @@ export async function PATCH(request, { params }) {
     if (!bot.token) return NextResponse.json({ error: 'Bot token is missing.' }, { status: 400 })
     const webhookUrl = `${new URL(request.url).origin}/api/telegram/webhook/${bot._id}`
     const result = await fetch(`https://api.telegram.org/bot${bot.token}/setWebhook`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: webhookUrl }),
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: webhookUrl, secret_token: bot.webhookSecret }),
     }).then((r) => r.json()).catch(() => ({ ok: false }))
     if (!result.ok) return NextResponse.json({ error: 'Unable to start bot.' }, { status: 502 })
-    updates.status = 'connected'
+    updates.status = 'running'
+    updates.isRunning = true
     updates.webhookUrl = webhookUrl
   } else if (action === 'stop') {
     if (!bot.token) return NextResponse.json({ error: 'Bot token is missing.' }, { status: 400 })
@@ -96,6 +99,7 @@ export async function PATCH(request, { params }) {
       .catch(() => ({ ok: false }))
     if (!result.ok) return NextResponse.json({ error: 'Unable to stop bot.' }, { status: 502 })
     updates.status = 'stopped'
+    updates.isRunning = false
   }
   await db.collection('bots').updateOne({ _id: bot._id }, { $set: updates })
 
