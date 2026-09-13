@@ -6,7 +6,35 @@ function html(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 
-// Format time in specified timezone (Asia/Jakarta, WIB, WIT, WITA, etc)
+// SSRF Protection Helper to block internal/private IP targets
+function isPrivateOrInternalUrl(urlString) {
+  try {
+    const parsed = new URL(urlString)
+    const hostname = parsed.hostname.toLowerCase()
+
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname === '::1' ||
+      hostname.endsWith('.internal') ||
+      hostname.endsWith('.local')
+    ) {
+      return true
+    }
+
+    // Match IPv4 private ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x, 169.254.x.x AWS Metadata)
+    if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|169\.254\.)/.test(hostname)) {
+      return true
+    }
+
+    return false
+  } catch {
+    return true
+  }
+}
+
+// Format time in specified timezone
 function getFormattedTimeInZone(timeZoneParam) {
   let tz = timeZoneParam || 'Asia/Jakarta'
   if (tz === 'WIB') tz = 'Asia/Jakarta'
@@ -89,6 +117,11 @@ export async function POST(request, { params }) {
     return NextResponse.json({ ok: false, error: 'Bot not found' }, { status: 404 })
   }
 
+  // STOPPED BOT CHECK: Do not process if bot status is stopped
+  if (bot.status === 'stopped' || bot.status === 'inactive' || bot.isRunning === false) {
+    return NextResponse.json({ ok: true, message: 'Bot is stopped' })
+  }
+
   let update
   try {
     update = await request.json()
@@ -96,7 +129,17 @@ export async function POST(request, { params }) {
     return NextResponse.json({ ok: false, error: 'Invalid JSON payload' }, { status: 400 })
   }
 
-  // Handle Dynamic Inline Callback Query (without requiring hardcoded URLs)
+  // TELEGRAM UPDATE DEDUPLICATION based on update_id
+  if (update.update_id) {
+    const dupKey = `upd:${bot._id}:${update.update_id}`
+    const existing = await db.collection('processed_updates').findOne({ _id: dupKey })
+    if (existing) {
+      return NextResponse.json({ ok: true, message: 'Duplicate update ignored' })
+    }
+    await db.collection('processed_updates').insertOne({ _id: dupKey, createdAt: new Date() }).catch(() => {})
+  }
+
+  // Handle Dynamic Inline Callback Query
   if (update.callback_query) {
     const cq = update.callback_query
     const chatId = cq.message?.chat?.id
@@ -159,7 +202,7 @@ export async function POST(request, { params }) {
     { _id: bot._id },
     {
       $inc: { commands: isCommand ? 1 : 0 },
-      $set: { lastMessageAt: new Date(), status: 'connected', updatedAt: new Date() },
+      $set: { lastMessageAt: new Date(), status: 'running', updatedAt: new Date() },
     }
   )
 
@@ -283,14 +326,28 @@ export async function POST(request, { params }) {
     let finalResponse = ''
     const decors = Array.isArray(customCmd.decorations) && customCmd.decorations.length > 0 ? customCmd.decorations.join(' ') + ' ' : ''
 
-    if (customCmd.aiSessionMode) {
-      // Find Gemini API Key from bot or user doc
+    if (customCmd.apiEndpoint) {
+      // API / Scrape Mode with SSRF Protection
+      if (isPrivateOrInternalUrl(customCmd.apiEndpoint)) {
+        finalResponse = `${decors}⚠️ <b>SSRF Protection:</b> Endpoint URL internal/private tidak diizinkan.`
+      } else {
+        try {
+          const apiRes = await fetch(customCmd.apiEndpoint)
+          const apiData = await apiRes.json()
+          finalResponse = `${decors}✨ <b>[API Result]</b>\n<pre>${html(JSON.stringify(apiData, null, 2))}</pre>`
+        } catch (err) {
+          finalResponse = `${decors}⚠️ <b>API Scrape Error:</b> ${html(err.message)}`
+        }
+      }
+    } else if (customCmd.aiSessionMode) {
+      // Gemini AI Mode
       const ownerUser = await db.collection('users').findOne({ _id: new ObjectId(bot.userId) }) || await db.collection('user').findOne({ id: bot.userId })
       const geminiApiKey = bot.geminiApiKey || ownerUser?.geminiApiKey || process.env.GEMINI_API_KEY
 
       if (!geminiApiKey) {
         finalResponse = `${decors}⚠️ <b>Gemini AI Config:</b> Silakan masukkan Gemini API Key di menu <b>Settings / AI Session</b> dashboard.`
       } else {
+        const startTime = Date.now()
         try {
           const { GoogleGenAI } = await import('@google/genai')
           const ai = new GoogleGenAI({ apiKey: geminiApiKey })
@@ -303,11 +360,35 @@ export async function POST(request, { params }) {
             contents: fullPrompt,
           })
 
+          const latency = Date.now() - startTime
           const aiText = response.text || 'Tidak ada respon dari Gemini AI.'
           finalResponse = `${decors}✨ <b>[Gemini AI Response]</b>\n${html(aiText)}`
+
+          // Log Gemini AI Usage in DB
+          await db.collection('gemini_logs').insertOne({
+            botId: bot._id,
+            userId: bot.userId,
+            telegramUser: senderUsername,
+            model: modelName,
+            latency,
+            status: 'SUCCESS',
+            createdAt: new Date(),
+          })
         } catch (err) {
+          const latency = Date.now() - startTime
           console.error('[Gemini AI Error]', err)
           finalResponse = `${decors}⚠️ <b>Gemini AI Error:</b> ${html(err.message || 'Gagal menghasilkan respon AI.')}`
+
+          await db.collection('gemini_logs').insertOne({
+            botId: bot._id,
+            userId: bot.userId,
+            telegramUser: senderUsername,
+            model: customCmd.aiModel || 'gemini-2.5-flash',
+            latency,
+            status: 'ERROR',
+            error: err.message,
+            createdAt: new Date(),
+          })
         }
       }
     } else {
@@ -349,7 +430,7 @@ export async function POST(request, { params }) {
     const tz = getFormattedTimeInZone(bot.timezone)
     await sendTelegramPayload(bot.token, 'sendMessage', {
       chat_id: chatId,
-      text: `<b>Status:</b> Operational\n<b>Timezone:</b> ${tz.timezone} (${tz.time} - ${tz.date})\n<b>Your Role:</b> ${botUserRole}`,
+      text: `<b>Status:</b> Operational (RUNNING)\n<b>Timezone:</b> ${tz.timezone} (${tz.time} - ${tz.date})\n<b>Your Role:</b> ${botUserRole}`,
       parse_mode: 'HTML',
       reply_to_message_id: message.message_id,
     })
