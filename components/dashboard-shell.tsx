@@ -45,6 +45,7 @@ export default function DashboardShell() {
 
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'bots' | 'commands' | 'database' | 'connection' | 'session'>('overview')
 
@@ -139,6 +140,9 @@ export default function DashboardShell() {
           if (typeof statsData.stats.totalRpgPlayers === 'number') setTotalRpgPlayers(statsData.stats.totalRpgPlayers)
         }
       }
+      setLoadError('')
+    } catch {
+      setLoadError('Dashboard data could not be refreshed. Check your connection and try again.')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -409,7 +413,7 @@ export default function DashboardShell() {
           </div>
 
           <p className="nav-label">Navigation & Categories</p>
-          <nav className="side-nav">
+          <nav className="side-nav" aria-label="Dashboard sections">
             <button onClick={() => { setActiveTab('overview'); setMobileOpen(false) }} className={activeTab === 'overview' ? 'active' : ''}>
               <LayoutDashboard size={17} /> Overview
             </button>
@@ -431,7 +435,7 @@ export default function DashboardShell() {
           </nav>
 
           <p className="nav-label">Configure</p>
-          <nav className="side-nav">
+          <nav className="side-nav" aria-label="Workspace configuration">
             <Link href="/settings"><Settings size={17} />Settings</Link>
             <Link href="/docs"><CircleHelp size={17} />Documentation & API</Link>
           </nav>
@@ -459,29 +463,31 @@ export default function DashboardShell() {
                 <Search size={16} />
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search bots..." />
               </div>
-              <button className="icon-button" aria-label="Toggle theme" onClick={toggleTheme}>
+              <button className="icon-button" aria-label="Toggle theme" aria-pressed={!dark} onClick={toggleTheme}>
                 {dark ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-              <button className="icon-button relative" aria-label="Notifications" onClick={() => setNotificationsOpen(!notificationsOpen)}>
-                <Bell size={18} /><i />
-              </button>
-              {notificationsOpen && (
-                <div className="absolute right-20 top-16 z-30 w-72 rounded-xl border border-border bg-card p-4 shadow-xl text-foreground">
-                  <b className="text-sm">Notifications</b>
-                  <p className="mt-2 text-xs text-muted-foreground">{logs.length ? `${logs.length} recent webhook events` : 'No new notifications.'}</p>
-                </div>
-              )}
+              <div className="dropdown-anchor">
+                <button className="icon-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileDropdownOpen(false) }}>
+                  <Bell size={18} />{logs.length > 0 && <i />}
+                </button>
+                {notificationsOpen && (
+                  <div className="dropdown-card notification-card">
+                    <b className="text-sm">Notifications</b>
+                    <p className="mt-2 text-xs text-muted-foreground">{logs.length ? `${logs.length} recent webhook events` : 'No new notifications.'}</p>
+                  </div>
+                )}
+              </div>
 
               {/* Enhanced Navbar Profile Dropdown */}
-              <div className="relative">
-                <button className="profile-chip" onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}>
+              <div className="dropdown-anchor">
+                <button className="profile-chip" aria-expanded={profileDropdownOpen} onClick={() => { setProfileDropdownOpen(!profileDropdownOpen); setNotificationsOpen(false) }}>
                   <span className="avatar small">{(user?.name || 'D').slice(0, 1).toUpperCase()}</span>
                   <span className="profile-name">{user?.name || 'User'}</span>
                   <ChevronDown size={15} />
                 </button>
 
                 {profileDropdownOpen && (
-                  <div className="absolute right-0 top-12 z-40 w-64 rounded-xl border border-border bg-card p-4 shadow-2xl text-foreground space-y-3">
+                  <div className="dropdown-card profile-dropdown">
                     <div className="border-b border-border pb-3">
                       <p className="font-bold text-sm truncate">{user?.name || 'Developer'}</p>
                       <p className="text-xs text-muted-foreground truncate">{user?.email || 'email@example.com'}</p>
@@ -508,6 +514,18 @@ export default function DashboardShell() {
           </header>
 
           <div className="content-wrap">
+            {loading && !user && (
+              <div className="loading-card" role="status">
+                <PuzzleSpinner size="sm" />
+                <span>Loading your workspace...</span>
+              </div>
+            )}
+            {loadError && (
+              <div className="load-error" role="status">
+                <span>{loadError}</span>
+                <button type="button" onClick={() => load()} className="load-error-action">Retry</button>
+              </div>
+            )}
             {/* System Hardware Specifications Display */}
             {systemMetrics && (
               <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
@@ -632,7 +650,7 @@ export default function DashboardShell() {
                             </div>
                           </div>
                           <div className="bot-health">
-                            <span className={`health-pill ${isConnected ? 'healthy' : isError ? 'pending' : 'pending'}`}>
+                            <span className={`health-pill ${isConnected ? 'healthy' : isError ? 'error' : 'pending'}`}>
                               <i />
                               {isConnected ? 'Operational' : isError ? 'Token Error' : 'Pending webhook'}
                             </span>
