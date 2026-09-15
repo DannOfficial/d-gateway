@@ -18,15 +18,13 @@ export interface GeminiSessionProps {
 
 export function GeminiSession({
   apiKey,
-  onSaveKey,
   onValidateKey,
   userRole = 'free',
   logs = [],
 }: GeminiSessionProps) {
   const [keyInput, setKeyInput] = useState(apiKey || '')
-  const [validating, setValidating] = useState(false)
-  const [validationResult, setValidationResult] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [validationResult, setValidationResult] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash')
 
   const totalReqs = logs.length
@@ -35,27 +33,22 @@ export function GeminiSession({
   const avgLatency =
     totalReqs > 0 ? Math.round(logs.reduce((a, b) => a + (b.latency || 0), 0) / totalReqs) : 0
 
-  async function handleValidate() {
-    if (!keyInput.trim()) return
-    setValidating(true)
+  async function handleSaveAndVerify() {
+    if (!keyInput.trim()) {
+      setValidationResult('⚠️ Please enter a valid Gemini API Key.')
+      return
+    }
+    setSaving(true)
     setValidationResult(null)
     try {
-      const res = await onValidateKey(keyInput)
+      const res = await onValidateKey(keyInput.trim())
       if (res.valid) {
-        setValidationResult('✅ Key Valid! Connected to Google Gemini API.')
+        setValidationResult('✅ Gemini API Key verified with @google/genai and saved successfully!')
       } else {
-        setValidationResult(`❌ Key Invalid: ${res.error || 'Validation failed'}`)
+        setValidationResult(`❌ ${res.error || 'Invalid Gemini API Key.'}`)
       }
-    } finally {
-      setValidating(false)
-    }
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    try {
-      await onSaveKey(keyInput)
-      setValidationResult('✅ Gemini API Key saved successfully!')
+    } catch {
+      setValidationResult('❌ Error connecting to Gemini validation service.')
     } finally {
       setSaving(false)
     }
@@ -70,7 +63,7 @@ export function GeminiSession({
 
       <div className="p-4 rounded-xl border border-border bg-background space-y-3 text-xs">
         <label className="block font-bold text-primary">
-          Google Gemini API Key (@google/genai)
+          Google Gemini API Key (@google/genai SDK)
           <input
             type="password"
             value={keyInput}
@@ -81,7 +74,13 @@ export function GeminiSession({
         </label>
 
         {validationResult && (
-          <div className="p-2.5 rounded-lg border border-border bg-muted/40 font-semibold">
+          <div
+            className={`p-2.5 rounded-lg border font-semibold ${
+              validationResult.startsWith('✅')
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                : 'border-destructive/30 bg-destructive/10 text-destructive'
+            }`}
+          >
             {validationResult}
           </div>
         )}
@@ -89,19 +88,11 @@ export function GeminiSession({
         <div className="flex gap-2">
           <button
             type="button"
-            disabled={validating || !keyInput}
-            onClick={handleValidate}
-            className="ghost-button compact"
-          >
-            {validating ? <PuzzleSpinner size="sm" /> : 'Check API Key ⚡'}
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={handleSave}
+            disabled={saving || !keyInput.trim()}
+            onClick={handleSaveAndVerify}
             className="primary-button compact"
           >
-            {saving ? <PuzzleSpinner size="sm" /> : 'Save Key →'}
+            {saving ? <PuzzleSpinner size="sm" /> : 'Save & Verify Gemini Key →'}
           </button>
         </div>
       </div>

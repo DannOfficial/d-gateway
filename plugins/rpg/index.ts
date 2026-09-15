@@ -174,17 +174,18 @@ export const rpgPlugin: PluginInterface = {
         })
 
         const today = new Date().toISOString().slice(0, 10)
-        if (player.dailyAt === today) {
+        const atomicRes = await ctx.db.collection('rpg_players').updateOne(
+          { key: playerKey, dailyAt: { $ne: today } },
+          { $set: { dailyAt: today } }
+        )
+
+        if (atomicRes.modifiedCount === 0) {
           return `⏳ <b>Daily Reward Claimed!</b>\nYou already claimed today's reward. Come back tomorrow!`
         }
 
         const bonusGold = 500
         const bonusXp = 200
         const res = await checkAndAddXp(ctx.db, playerKey, player, bonusXp, bonusGold)
-
-        await ctx.db.collection('rpg_players').updateOne({ key: playerKey }, {
-          $set: { dailyAt: today },
-        })
 
         let text = `🎁 <b>Daily Bonus Claimed!</b>\nReceived: 💰 +$${bonusGold} Cash | ⭐ +${bonusXp} XP`
         if (res.leveledUp) text += `\n🎉 <b>LEVEL UP!</b> You reached <b>Level ${res.newLevel}</b>!`
@@ -336,9 +337,14 @@ export const rpgPlugin: PluginInterface = {
           inv.push({ id: shopItem.id, name: shopItem.name, count: 1, rarity: shopItem.rarity })
         }
 
-        await ctx.db.collection('rpg_players').updateOne({ key: playerKey }, {
-          $set: { money: player.money - shopItem.price, inventory: inv },
-        })
+        const atomicRes = await ctx.db.collection('rpg_players').updateOne(
+          { key: playerKey, money: { $gte: shopItem.price } },
+          { $inc: { money: -shopItem.price }, $set: { inventory: inv, updatedAt: new Date() } }
+        )
+
+        if (atomicRes.modifiedCount === 0) {
+          return `💸 <b>Transaction Failed!</b> Insufficient cash or concurrent transaction.`
+        }
 
         return `✅ <b>Purchased ${shopItem.name}!</b>\nSpent $${shopItem.price}. Remaining cash: $${player.money - shopItem.price}.`
       },
@@ -373,7 +379,7 @@ export const rpgPlugin: PluginInterface = {
         }
 
         await ctx.db.collection('rpg_players').updateOne({ key: playerKey }, {
-          $set: { inventory: inv },
+          $set: { inventory: inv, updatedAt: new Date() },
           $inc: { money: refund },
         })
 
@@ -409,7 +415,7 @@ export const rpgPlugin: PluginInterface = {
         }
 
         await ctx.db.collection('rpg_players').updateOne({ key: playerKey }, {
-          $set: { health: newHp, inventory: inv },
+          $set: { health: newHp, inventory: inv, updatedAt: new Date() },
         })
 
         return `✨ <b>Used ${item.name}!</b> Restored +${healAmt} HP. (Current HP: ${newHp}/${player.maxHp})`
@@ -439,7 +445,7 @@ export const rpgPlugin: PluginInterface = {
         const equipment = player.equipment || { weapon: null, armor: null }
         equipment[slot] = shopItem.name
 
-        await ctx.db.collection('rpg_players').updateOne({ key: playerKey }, { $set: { equipment } })
+        await ctx.db.collection('rpg_players').updateOne({ key: playerKey }, { $set: { equipment, updatedAt: new Date() } })
 
         return `🛡️ <b>Equipped ${shopItem.name}!</b> (${slot.toUpperCase()} slot active)`
       },
@@ -462,7 +468,7 @@ export const rpgPlugin: PluginInterface = {
         const equipment = player.equipment || { weapon: null, armor: null }
         equipment[slot] = null
 
-        await ctx.db.collection('rpg_players').updateOne({ key: playerKey }, { $set: { equipment } })
+        await ctx.db.collection('rpg_players').updateOne({ key: playerKey }, { $set: { equipment, updatedAt: new Date() } })
         return `🔓 <b>Unequipped ${slot}!</b>`
       },
     },
@@ -529,6 +535,32 @@ export const rpgPlugin: PluginInterface = {
           `${checkCd('Farm (/farm)', cds.farm, 120000)}\n` +
           `${checkCd('Work (/work)', cds.work, 180000)}\n` +
           `${checkCd('Adventure (/adventure)', cds.adventure, 300000)}`
+      },
+    },
+    {
+      command: 'help',
+      description: 'Display all RPG commands and instructions',
+      category: 'rpg',
+      handler: async () => {
+        return `🎮 <b>Telegram Gateway RPG Commands</b>\n\n` +
+          `• <code>/rpg</code> - Player Profile\n` +
+          `• <code>/stats</code> - Combat Stats\n` +
+          `• <code>/inventory</code> - Inventory Items\n` +
+          `• <code>/hunt</code> - Hunt Monsters\n` +
+          `• <code>/farm</code> - Harvest Crops\n` +
+          `• <code>/daily</code> - Claim Daily Bonus\n` +
+          `• <code>/work</code> - Work Job\n` +
+          `• <code>/adventure</code> - Explore Dungeon\n` +
+          `• <code>/fight</code> - Boss Battle\n` +
+          `• <code>/shop</code> - Item Shop\n` +
+          `• <code>/buy &lt;item&gt;</code> - Buy Item\n` +
+          `• <code>/sell &lt;item&gt;</code> - Sell Item\n` +
+          `• <code>/use &lt;item&gt;</code> - Consume Item\n` +
+          `• <code>/equip &lt;item&gt;</code> - Equip Gear\n` +
+          `• <code>/unequip &lt;slot&gt;</code> - Unequip Gear\n` +
+          `• <code>/quests</code> - Quests Progress\n` +
+          `• <code>/leaderboard</code> - Top Rankings\n` +
+          `• <code>/cooldown</code> - Timer Check`
       },
     },
   ],

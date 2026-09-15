@@ -65,6 +65,7 @@ export default function DashboardShell() {
   const [pinDialog, setPinDialog] = useState(false)
   const [enteredPin, setEnteredPin] = useState('')
   const [pinVerified, setPinVerified] = useState(true)
+  const [pinVerifying, setPinVerifying] = useState(false)
   const [pinError, setPinError] = useState('')
 
   // Bot Connection Modal
@@ -235,15 +236,34 @@ export default function DashboardShell() {
     await fetch(`/api/commands/${id}`, { method: 'DELETE' })
   }
 
-  function handlePinSubmit(e: React.FormEvent) {
+  async function handlePinSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (enteredPin.length >= 4) {
-      sessionStorage.setItem('dann_2fa_ok', 'true')
-      setPinVerified(true)
-      setPinDialog(false)
-      setPinError('')
-    } else {
+    if (enteredPin.length < 4) {
       setPinError('PIN 2FA minimal 4 digit.')
+      return
+    }
+
+    setPinVerifying(true)
+    setPinError('')
+    try {
+      const res = await fetch('/api/auth/verify-2fa', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pin: enteredPin }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        sessionStorage.setItem('dann_2fa_ok', 'true')
+        setPinVerified(true)
+        setPinDialog(false)
+        setPinError('')
+      } else {
+        setPinError(data.error?.message || 'Incorrect 2FA PIN.')
+      }
+    } catch {
+      setPinError('Network error while verifying 2FA PIN.')
+    } finally {
+      setPinVerifying(false)
     }
   }
 
@@ -275,8 +295,8 @@ export default function DashboardShell() {
               autoFocus
             />
             {pinError && <p className="text-xs text-destructive">{pinError}</p>}
-            <button type="submit" className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition">
-              Verifikasi PIN →
+            <button type="submit" disabled={pinVerifying} className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition flex items-center justify-center gap-2">
+              {pinVerifying ? <PuzzleSpinner size="sm" /> : 'Verifikasi PIN →'}
             </button>
           </form>
         </div>

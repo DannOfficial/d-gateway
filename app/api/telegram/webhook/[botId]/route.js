@@ -1,38 +1,11 @@
 import { NextResponse } from 'next/server'
 import { ObjectId } from 'mongodb'
 import { getDb } from '../../../../../lib/mongodb'
-import { safeFetch } from '../../../../../lib/safe-fetch'
 import { pluginRegistry } from '../../../../../plugins'
 import { executeExternalApiCommand } from '../../../../../lib/api-runner'
 
 function html(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-}
-
-function isPrivateOrInternalUrl(urlString) {
-  try {
-    const parsed = new URL(urlString)
-    const hostname = parsed.hostname.toLowerCase()
-
-    if (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '0.0.0.0' ||
-      hostname === '::1' ||
-      hostname.endsWith('.internal') ||
-      hostname.endsWith('.local')
-    ) {
-      return true
-    }
-
-    if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|169\.254\.)/.test(hostname)) {
-      return true
-    }
-
-    return false
-  } catch {
-    return true
-  }
 }
 
 function getFormattedTimeInZone(timeZoneParam) {
@@ -319,11 +292,15 @@ export async function POST(request, { params }) {
     }
 
     let finalResponse = ''
+    let activeImageUrl = customCmd.imageUrl
     const decors = Array.isArray(customCmd.decorations) && customCmd.decorations.length > 0 ? customCmd.decorations.join(' ') + ' ' : ''
 
     if (customCmd.apiEndpoint) {
       const apiExecResult = await executeExternalApiCommand(db, bot, customCmd, queryParam, senderUsername)
-      finalResponse = decors + apiExecResult
+      finalResponse = decors + (apiExecResult.text || '')
+      if (apiExecResult.dynamicImageUrl && !activeImageUrl) {
+        activeImageUrl = apiExecResult.dynamicImageUrl
+      }
     } else if (customCmd.aiSessionMode) {
       const ownerUser = await db.collection('users').findOne({ _id: new ObjectId(bot.userId) }) || await db.collection('user').findOne({ id: bot.userId })
       const geminiApiKey = bot.geminiApiKey || ownerUser?.geminiApiKey || process.env.GEMINI_API_KEY
@@ -381,9 +358,9 @@ export async function POST(request, { params }) {
     if (queryParam) finalResponse = finalResponse.replace(/@query\b/g, html(queryParam))
     if (bot.footer) finalResponse += `\n\n${bot.footer}`
 
-    if (customCmd.responseType === 'image' && customCmd.imageUrl) {
+    if ((customCmd.responseType === 'image' || activeImageUrl) && activeImageUrl) {
       await sendTelegramPayload(bot.token, 'sendPhoto', {
-        chat_id: chatId, photo: customCmd.imageUrl, caption: finalResponse, parse_mode: 'HTML', reply_markup, reply_to_message_id: message.message_id,
+        chat_id: chatId, photo: activeImageUrl, caption: finalResponse, parse_mode: 'HTML', reply_markup, reply_to_message_id: message.message_id,
       })
     } else {
       await sendTelegramPayload(bot.token, 'sendMessage', {

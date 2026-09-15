@@ -3,12 +3,7 @@ import bcrypt from 'bcryptjs'
 import { randomUUID } from 'crypto'
 import { getDb } from '../../../../lib/mongodb'
 import { sendGmailVerificationEmail } from '../../../../lib/email'
-
-function getAppBaseUrl(request) {
-  const host = request.headers.get('host') || 'localhost:3000'
-  const proto = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https')
-  return `${proto}://${host}`
-}
+import { getBaseUrl } from '../../../../lib/config'
 
 export async function POST(request) {
   try {
@@ -43,7 +38,7 @@ export async function POST(request) {
     }
 
     const result = await db.collection('users').insertOne(userDoc)
-    const baseUrl = getAppBaseUrl(request)
+    const baseUrl = getBaseUrl()
     const verificationUrl = `${baseUrl}/api/auth/verify-email?token=${verificationToken}`
 
     // Send verification email via Gmail SMTP

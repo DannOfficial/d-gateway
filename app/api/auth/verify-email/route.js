@@ -1,17 +1,12 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { getDb } from '../../../../lib/mongodb'
-
-function getAppBaseUrl(request) {
-  const host = request.headers.get('host') || 'localhost:3000'
-  const proto = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https')
-  return `${proto}://${host}`
-}
+import { getBaseUrl } from '../../../../lib/config'
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url)
   const token = searchParams.get('token')
-  const baseUrl = getAppBaseUrl(request)
+  const baseUrl = getBaseUrl()
 
   if (!token) {
     return NextResponse.redirect(`${baseUrl}/login?error=missing-token`)
