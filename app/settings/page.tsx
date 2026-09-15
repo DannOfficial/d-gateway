@@ -7,19 +7,16 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/card'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
-import { Switch } from '@/components/ui/Switch'
 import { Toast } from '@/components/ui/Toast'
 import { PuzzleSpinner } from '@/components/ui/puzzle-spinner'
 
-type BotItem = { id: string; name: string; username: string | null; timezone?: string; rpgMode?: boolean; footer?: string; delay?: number }
+type BotItem = { id: string; name: string; username: string | null; footer?: string; delay?: number }
 type User = { id?: string; name: string; email: string; role?: string }
 
 export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null)
   const [bots, setBots] = useState<BotItem[]>([])
   const [selectedBotId, setSelectedBotId] = useState('')
-  const [botTimezone, setBotTimezone] = useState('Asia/Jakarta')
-  const [rpgEnabled, setRpgEnabled] = useState(false)
   const [botFooter, setBotFooter] = useState('')
   const [botDelay, setBotDelay] = useState(0)
   const [geminiApiKey, setGeminiApiKey] = useState('')
@@ -51,8 +48,6 @@ export default function SettingsPage() {
           setBots(bList)
           if (bList.length > 0) {
             setSelectedBotId(bList[0].id)
-            setBotTimezone(bList[0].timezone || 'Asia/Jakarta')
-            setRpgEnabled(Boolean(bList[0].rpgMode))
             setBotFooter(bList[0].footer || '')
             setBotDelay(bList[0].delay || 0)
           }
@@ -65,8 +60,6 @@ export default function SettingsPage() {
     setSelectedBotId(botId)
     const b = bots.find((item) => item.id === botId)
     if (b) {
-      setBotTimezone(b.timezone || 'Asia/Jakarta')
-      setRpgEnabled(Boolean(b.rpgMode))
       setBotFooter(b.footer || '')
       setBotDelay(b.delay || 0)
     }
@@ -88,7 +81,7 @@ export default function SettingsPage() {
         const res = await fetch(`/api/bots/${selectedBotId}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ timezone: botTimezone, rpgMode: rpgEnabled, footer: botFooter, delay: botDelay, geminiApiKey }),
+          body: JSON.stringify({ footer: botFooter, delay: botDelay, geminiApiKey }),
         })
         if (res.ok) {
           setToastMsg('Konfigurasi bot berhasil disimpan.')
@@ -128,7 +121,7 @@ export default function SettingsPage() {
     <DashboardLayout user={user} activeTab="settings" botsCount={bots.length}>
       <PageHeader
         title="Settings & Configuration"
-        subtitle="Manage owner roles, response delays, RPG engine toggle, broadcast, and Gemini AI configuration."
+        subtitle="Manage owner access, bot message footers, response delays, broadcasts, and Gemini AI configuration."
         icon={<SettingsIcon size={22} />}
       />
 
@@ -154,27 +147,16 @@ export default function SettingsPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
-                  label="Response Timezone (Asia/Jakarta, WIB, etc.)"
-                  value={botTimezone}
-                  onChange={(e) => setBotTimezone(e.target.value)}
-                  placeholder="Asia/Jakarta"
-                />
-                <Input
                   label="Response Delay (Seconds)"
                   type="number"
                   value={botDelay}
                   onChange={(e) => setBotDelay(Number(e.target.value))}
                   placeholder="0"
                 />
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-border bg-muted/20">
-                <Switch
-                  label="Enable Role Playing Game (RPG) Engine"
-                  description="Enables /rpg, /hunt, /daily, /farm, and /inventory commands for users in Telegram."
-                  checked={rpgEnabled}
-                  onChange={setRpgEnabled}
-                />
+                <div className="p-3 border border-border rounded-xl bg-muted/20 flex flex-col justify-center">
+                  <span className="font-semibold text-muted-foreground uppercase text-[10px]">Default Timezone</span>
+                  <span className="text-xs font-bold text-foreground">Asia/Jakarta (WIB)</span>
+                </div>
               </div>
 
               <div>

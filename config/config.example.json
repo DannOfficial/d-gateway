@@ -1,0 +1,26 @@
+{
+  "app": {
+    "name": "Dann-Tele Gateway",
+    "baseUrl": "https://dannteam.biz.id",
+    "callbackPath": "/callback",
+    "timezone": "Asia/Jakarta"
+  },
+  "oauth": {
+    "google": {
+      "clientId": "YOUR_GOOGLE_CLIENT_ID",
+      "clientSecret": "YOUR_GOOGLE_CLIENT_SECRET",
+      "redirectUri": "https://dannteam.biz.id/callback?provider=google"
+    },
+    "github": {
+      "clientId": "YOUR_GITHUB_CLIENT_ID",
+      "clientSecret": "YOUR_GITHUB_CLIENT_SECRET",
+      "redirectUri": "https://dannteam.biz.id/callback?provider=github"
+    }
+  },
+  "gemini": {
+    "defaultModel": "gemini-2.5-flash"
+  },
+  "telegram": {
+    "apiEndpoint": "https://api.telegram.org"
+  }
+}

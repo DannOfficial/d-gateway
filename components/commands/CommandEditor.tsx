@@ -2,13 +2,13 @@
 
 import React from 'react'
 import { Modal } from '@/components/ui/Modal'
-import { CommandForm, CommandFormData } from './CommandForm'
+import { CommandWizard, CommandWizardData } from './CommandWizard'
 
 export interface CommandEditorProps {
   open: boolean
   onClose: () => void
-  initialData?: Partial<CommandFormData>
-  onSave: (data: CommandFormData) => Promise<void>
+  initialData?: Partial<CommandWizardData>
+  onSave: (data: any) => Promise<void>
   saving?: boolean
 }
 
@@ -23,11 +23,11 @@ export function CommandEditor({
     <Modal
       open={open}
       onClose={onClose}
-      title={initialData?.id ? 'Edit Command' : 'Create Custom Command'}
-      subtitle="Configure triggers, decorations, mode scopes, limits, roles, and AI/API settings."
-      maxWidth="2xl"
+      title={initialData?.id ? 'Edit Command Wizard' : 'Create Custom Command Wizard'}
+      subtitle="10-Step Wizard for configuring triggers, parameters, response templates, permissions, API, AI, and live testing."
+      maxWidth="3xl"
     >
-      <CommandForm initialData={initialData} onSave={onSave} saving={saving} />
+      <CommandWizard initialData={initialData} onSave={onSave} saving={saving} />
     </Modal>
   )
 }

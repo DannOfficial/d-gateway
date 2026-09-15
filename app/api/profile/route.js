@@ -5,7 +5,9 @@ import bcrypt from 'bcryptjs'
 
 export async function POST(request) {
   const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) {
+    return NextResponse.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } }, { status: 401 })
+  }
 
   try {
     const body = await request.json()
@@ -22,10 +24,18 @@ export async function POST(request) {
       updateDoc.email = email.trim().toLowerCase()
       updateDoc.emailVerified = false
     }
-    if (typeof password === 'string' && password.length >= 8) updateDoc.password = await bcrypt.hash(password, 12)
-    if (typeof twoFactorEnabled === 'boolean') updateDoc.twoFactorEnabled = twoFactorEnabled
-    if (typeof twoFactorPin === 'string') updateDoc.twoFactorPin = twoFactorPin.trim()
-    if (typeof geminiApiKey === 'string') updateDoc.geminiApiKey = geminiApiKey.trim()
+    if (typeof password === 'string' && password.length >= 8) {
+      updateDoc.passwordHash = await bcrypt.hash(password, 12)
+    }
+    if (typeof twoFactorEnabled === 'boolean') {
+      updateDoc.twoFactorEnabled = twoFactorEnabled
+    }
+    if (typeof twoFactorPin === 'string' && twoFactorPin.trim()) {
+      updateDoc.twoFactorPin = await bcrypt.hash(twoFactorPin.trim(), 12)
+    }
+    if (typeof geminiApiKey === 'string') {
+      updateDoc.geminiApiKey = geminiApiKey.trim()
+    }
 
     const db = await getDb()
     const uId = user._id ? user._id : user.id
@@ -34,9 +44,9 @@ export async function POST(request) {
     await db.collection('users').updateOne(query, { $set: updateDoc })
     await db.collection('user').updateOne({ id: uId }, { $set: updateDoc }).catch(() => {})
 
-    return NextResponse.json({ ok: true, message: 'Profile updated successfully.' })
+    return NextResponse.json({ success: true, data: { message: 'Profile updated successfully.' } })
   } catch (err) {
     console.error('Profile update error:', err)
-    return NextResponse.json({ error: 'Failed to update profile.' }, { status: 500 })
+    return NextResponse.json({ success: false, error: { code: 'SERVER_ERROR', message: 'Failed to update profile.' } }, { status: 500 })
   }
 }
