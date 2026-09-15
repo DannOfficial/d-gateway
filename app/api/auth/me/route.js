@@ -1,21 +1,31 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '../../../../lib/auth'
-import { getDb } from '../../../../lib/mongodb'
+import { getDb, ObjectId } from '../../../../lib/mongodb'
 import { cookies } from 'next/headers'
 
 export async function GET() {
   const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ user: null }, { status: 401 })
+  if (!user) return NextResponse.json({ success: false, user: null }, { status: 401 })
+
+  const db = await getDb()
+  const uId = user._id ? user._id : user.id
+  const query = typeof uId === 'string' && ObjectId.isValid(uId) ? { _id: new ObjectId(uId) } : { _id: uId }
+  const freshUser = await db.collection('users').findOne(query) || user
 
   return NextResponse.json({
+    success: true,
     user: {
-      id: user._id ? user._id.toString() : user.id,
-      name: user.name,
-      email: user.email,
-      surveySource: user.surveySource || null,
-      role: user.role || 'free',
-      plan: user.plan || 'free',
-      emailVerified: user.emailVerified ?? true,
+      id: freshUser._id ? freshUser._id.toString() : freshUser.id,
+      name: freshUser.name,
+      email: freshUser.email,
+      surveySource: freshUser.surveySource || null,
+      role: freshUser.role || 'free',
+      plan: freshUser.plan || 'free',
+      emailVerified: freshUser.emailVerified ?? true,
+      twoFactorEnabled: Boolean(freshUser.twoFactorEnabled),
+      hasTwoFactorPin: Boolean(freshUser.twoFactorPin),
+      geminiApiKey: freshUser.geminiApiKey || '',
+      image: freshUser.image || null,
     },
   })
 }
@@ -33,7 +43,7 @@ export async function DELETE() {
     }
   }
 
-  const response = NextResponse.json({ ok: true })
+  const response = NextResponse.json({ success: true, message: 'Logged out successfully.' })
   response.cookies.delete('dann_session')
   response.cookies.delete('better-auth.session_token')
   return response

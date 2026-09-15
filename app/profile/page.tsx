@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useRef } from 'react'
-import { User, ShieldCheck, Key, Download, Camera, Mail, Sparkles, Edit3 } from 'lucide-react'
+import { User, Key, Download, Camera, Mail, Sparkles, Edit3, RotateCw, ZoomIn, Sliders, RefreshCw, FlipHorizontal, FlipVertical } from 'lucide-react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/card'
@@ -19,7 +19,18 @@ type UserData = {
   twoFactorEnabled?: boolean
   twoFactorPin?: string
   geminiApiKey?: string
+  image?: string
 }
+
+const PRESET_FILTERS = [
+  { id: 'original', name: 'Original', css: 'none' },
+  { id: 'bw', name: 'B&W', css: 'grayscale(100%) contrast(120%)' },
+  { id: 'sepia', name: 'Sepia', css: 'sepia(100%)' },
+  { id: 'warm', name: 'Warm', css: 'sepia(30%) saturate(140%)' },
+  { id: 'cool', name: 'Cool', css: 'hue-rotate(180deg) saturate(120%)' },
+  { id: 'high_contrast', name: 'High Contrast', css: 'contrast(160%) brightness(110%)' },
+  { id: 'vintage', name: 'Vintage', css: 'sepia(50%) contrast(110%) brightness(90%)' },
+]
 
 export default function ProfilePage() {
   const [user, setUser] = useState<UserData | null>(null)
@@ -40,11 +51,19 @@ export default function ProfilePage() {
   const [otpVerifying, setOtpVerifying] = useState(false)
   const [otpError, setOtpError] = useState('')
 
-  // Avatar Crop Modal
+  // Interactive Image Editor Modal State
   const [cropModal, setCropModal] = useState(false)
   const [rawImageSrc, setRawImageSrc] = useState<string | null>(null)
+  const [rotation, setRotation] = useState(0)
   const [zoomLevel, setZoomLevel] = useState(1)
+  const [flipH, setFlipH] = useState(false)
+  const [flipV, setFlipV] = useState(false)
+  const [brightness, setBrightness] = useState(100)
+  const [contrast, setContrast] = useState(100)
+  const [selectedFilter, setSelectedFilter] = useState('original')
+
   const imgRef = useRef<HTMLImageElement | null>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -60,48 +79,95 @@ export default function ProfilePage() {
           setEmail(data.user.email || '')
           setNewEmail(data.user.email || '')
           setTwoFactor(Boolean(data.user.twoFactorEnabled))
-          setTwoFactorPin(data.user.twoFactorPin || '')
           setGeminiApiKey(data.user.geminiApiKey || '')
+          if (data.user.image) setAvatarUrl(data.user.image)
         }
       })
       .finally(() => setLoading(false))
   }, [])
 
+  function resetEditor() {
+    setRotation(0)
+    setZoomLevel(1)
+    setFlipH(false)
+    setFlipV(false)
+    setBrightness(100)
+    setContrast(100)
+    setSelectedFilter('original')
+  }
+
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setToastMsg('Ukuran foto maksimal 5MB.')
+        return
+      }
       const reader = new FileReader()
       reader.onload = () => {
         setRawImageSrc(reader.result as string)
+        resetEditor()
         setCropModal(true)
       }
       reader.readAsDataURL(file)
     }
   }
 
-  function applyCrop() {
-    if (!rawImageSrc) return
+  function applyAndUploadProcessedImage() {
+    if (!rawImageSrc || !imgRef.current) return
+    setUploadingAvatar(true)
+
     const canvas = document.createElement('canvas')
-    const size = 300
+    const size = 320
     canvas.width = size
     canvas.height = size
     const ctx = canvas.getContext('2d')
+
     if (ctx && imgRef.current) {
       const img = imgRef.current
+      ctx.save()
+
+      ctx.translate(size / 2, size / 2)
+      ctx.rotate((rotation * Math.PI) / 180)
+      ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1)
+      ctx.scale(zoomLevel, zoomLevel)
+
+      const preset = PRESET_FILTERS.find((f) => f.id === selectedFilter)
+      let filterString = `brightness(${brightness}%) contrast(${contrast}%)`
+      if (preset && preset.css !== 'none') {
+        filterString += ` ${preset.css}`
+      }
+      ctx.filter = filterString
+
       const minDim = Math.min(img.naturalWidth, img.naturalHeight)
       const sx = (img.naturalWidth - minDim) / 2
       const sy = (img.naturalHeight - minDim) / 2
-      ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size)
-      const croppedUrl = canvas.toDataURL('image/jpeg', 0.9)
-      setAvatarUrl(croppedUrl)
+
+      ctx.drawImage(img, sx, sy, minDim, minDim, -size / 2, -size / 2, size, size)
+      ctx.restore()
+
+      const processedBase64 = canvas.toDataURL('image/jpeg', 0.92)
+      setAvatarUrl(processedBase64)
 
       fetch('/api/profile/avatar', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ image: croppedUrl }),
-      }).catch(() => {})
+        body: JSON.stringify({ image: processedBase64 }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            setToastMsg('Profile avatar image saved!')
+          } else {
+            setToastMsg(data.error?.message || 'Failed to update avatar.')
+          }
+        })
+        .catch(() => setToastMsg('Error uploading image.'))
+        .finally(() => {
+          setUploadingAvatar(false)
+          setCropModal(false)
+        })
     }
-    setCropModal(false)
   }
 
   async function handleSendEmailOtp() {
@@ -134,11 +200,12 @@ export default function ProfilePage() {
           geminiApiKey: geminiApiKey || undefined,
         }),
       })
-      if (res.ok) {
+      const data = await res.json()
+      if (res.ok && data.success) {
         setToastMsg('Profil dan konfigurasi berhasil diperbarui.')
         setUser((prev) => (prev ? { ...prev, name, twoFactorEnabled: twoFactor } : prev))
       } else {
-        setToastMsg('Gagal memperbarui profil.')
+        setToastMsg(data.error?.message || 'Gagal memperbarui profil.')
       }
     } finally {
       setSaving(false)
@@ -181,11 +248,14 @@ export default function ProfilePage() {
     )
   }
 
+  const activePresetCss = PRESET_FILTERS.find((f) => f.id === selectedFilter)?.css || 'none'
+  const combinedFilterStyle = `brightness(${brightness}%) contrast(${contrast}%) ${activePresetCss !== 'none' ? activePresetCss : ''}`
+
   return (
     <DashboardLayout user={user} activeTab="profile">
       <PageHeader
         title="Profile Settings & Security"
-        subtitle="Manage full name, cropped avatar, email OTP verification, 2FA security PIN, and Gemini key."
+        subtitle="Manage name, cropped avatar, email OTP verification, 2FA security PIN, and Gemini key."
         icon={<User size={22} />}
       />
 
@@ -202,12 +272,12 @@ export default function ProfilePage() {
               </div>
               <label className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition cursor-pointer text-white">
                 <Camera size={20} />
-                <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} className="hidden" />
               </label>
             </div>
             <div>
               <h2 className="font-bold text-sm">Avatar & Profile Image</h2>
-              <p className="text-muted-foreground text-[11px]">Hover to upload image with crop preview dialog.</p>
+              <p className="text-muted-foreground text-[11px]">Hover to upload image with interactive editor (crop, filters, rotate, zoom).</p>
             </div>
           </div>
 
@@ -291,7 +361,7 @@ export default function ProfilePage() {
 
               {twoFactor && (
                 <Input
-                  label="Set 2FA Security PIN (4 - 6 Digits)"
+                  label="Set / Update 2FA Security PIN (4 - 6 Digits)"
                   type="password"
                   maxLength={6}
                   value={twoFactorPin}
@@ -313,39 +383,131 @@ export default function ProfilePage() {
         </Card>
       </form>
 
-      {/* Avatar Crop Preview Modal */}
-      <Modal open={cropModal} onClose={() => setCropModal(false)} title="Avatar Crop Preview" maxWidth="sm">
-        <div className="space-y-4 text-xs text-center">
-          <div className="relative mx-auto h-48 w-48 overflow-hidden rounded-full border-4 border-primary bg-black/50 flex items-center justify-center">
+      {/* Interactive Profile Image Editor Modal */}
+      <Modal open={cropModal} onClose={() => setCropModal(false)} title="Interactive Profile Image Editor" maxWidth="md">
+        <div className="space-y-5 text-xs">
+          <div className="relative mx-auto size-52 overflow-hidden rounded-full border-4 border-primary bg-black/80 flex items-center justify-center shadow-lg">
             {rawImageSrc && (
               <img
                 ref={imgRef}
                 src={rawImageSrc}
-                alt="Preview"
-                className="h-full w-full object-cover"
-                style={{ transform: `scale(${zoomLevel})` }}
+                alt="Crop Preview"
+                className="h-full w-full object-cover transition-transform"
+                style={{
+                  transform: `rotate(${rotation}deg) scale(${zoomLevel}) scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1})`,
+                  filter: combinedFilterStyle,
+                }}
               />
             )}
           </div>
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-muted-foreground mb-1">Zoom Adjust</label>
-            <input
-              type="range"
-              min="1"
-              max="2.5"
-              step="0.1"
-              value={zoomLevel}
-              onChange={(e) => setZoomLevel(Number(e.target.value))}
-              className="w-full"
-            />
+
+          <div className="grid grid-cols-2 gap-3 p-3 border border-border rounded-xl bg-muted/20">
+            <div>
+              <label className="font-bold flex items-center gap-1.5 uppercase text-[10px] text-muted-foreground mb-1">
+                <ZoomIn size={12} /> Zoom ({zoomLevel.toFixed(1)}x)
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.1"
+                value={zoomLevel}
+                onChange={(e) => setZoomLevel(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold flex items-center gap-1.5 uppercase text-[10px] text-muted-foreground mb-1">
+                <Sliders size={12} /> Brightness ({brightness}%)
+              </label>
+              <input
+                type="range"
+                min="50"
+                max="150"
+                step="5"
+                value={brightness}
+                onChange={(e) => setBrightness(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold flex items-center gap-1.5 uppercase text-[10px] text-muted-foreground mb-1">
+                <Sliders size={12} /> Contrast ({contrast}%)
+              </label>
+              <input
+                type="range"
+                min="50"
+                max="150"
+                step="5"
+                value={contrast}
+                onChange={(e) => setContrast(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setRotation((prev) => (prev + 90) % 360)}
+                className="flex-1 inline-flex items-center justify-center gap-1 p-2 rounded-lg border bg-background font-semibold"
+              >
+                <RotateCw size={12} /> Rotate 90°
+              </button>
+              <button
+                type="button"
+                onClick={() => setFlipH(!flipH)}
+                className={`p-2 rounded-lg border font-semibold ${flipH ? 'bg-primary text-primary-foreground' : 'bg-background'}`}
+                title="Flip Horizontal"
+              >
+                <FlipHorizontal size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setFlipV(!flipV)}
+                className={`p-2 rounded-lg border font-semibold ${flipV ? 'bg-primary text-primary-foreground' : 'bg-background'}`}
+                title="Flip Vertical"
+              >
+                <FlipVertical size={14} />
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setCropModal(false)} className="flex-1 rounded-xl border border-border py-2 font-semibold">
-              Cancel
+
+          <div>
+            <label className="block font-bold uppercase text-[10px] text-muted-foreground mb-1.5">Preset Filters</label>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESET_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setSelectedFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                    selectedFilter === f.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background hover:bg-muted'
+                  }`}
+                >
+                  {f.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <button
+              type="button"
+              onClick={resetEditor}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:underline"
+            >
+              <RefreshCw size={12} /> Reset Adjustments
             </button>
-            <button type="button" onClick={applyCrop} className="flex-1 primary-button">
-              Apply & Save →
-            </button>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setCropModal(false)} className="rounded-xl border border-border px-4 py-2 font-semibold">
+                Cancel
+              </button>
+              <button type="button" onClick={applyAndUploadProcessedImage} disabled={uploadingAvatar} className="primary-button">
+                {uploadingAvatar ? <PuzzleSpinner size="sm" /> : 'Apply & Save Image →'}
+              </button>
+            </div>
           </div>
         </div>
       </Modal>
