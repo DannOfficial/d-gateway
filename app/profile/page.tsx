@@ -1,11 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { useRef } from 'react'
-import {
-  User, Shield, Key, Download, LayoutDashboard, Bot, Command, List, Settings, LogOut, Menu, Moon, Sun, ChevronDown, Camera, CheckCircle2, Lock, ShieldCheck, Edit3, Mail, Sparkles, Check
-} from 'lucide-react'
+import React, { useEffect, useState, useRef } from 'react'
+import { User, ShieldCheck, Key, Download, Camera, Mail, Sparkles, Edit3 } from 'lucide-react'
+import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/Input'
+import { Switch } from '@/components/ui/Switch'
+import { Modal } from '@/components/ui/Modal'
+import { Toast } from '@/components/ui/Toast'
 import { PuzzleSpinner } from '@/components/ui/puzzle-spinner'
 
 type UserData = {
@@ -14,6 +17,8 @@ type UserData = {
   email: string
   role?: string
   twoFactorEnabled?: boolean
+  twoFactorPin?: string
+  geminiApiKey?: string
 }
 
 export default function ProfilePage() {
@@ -27,15 +32,15 @@ export default function ProfilePage() {
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string>('')
 
-  // Email Edit Mode & OTP State
+  // Email Edit & OTP
   const [isEditingEmail, setIsEditingEmail] = useState(false)
   const [otpModal, setOtpModal] = useState(false)
   const [otpCode, setOtpCode] = useState('')
   const [otpSending, setOtpSending] = useState(false)
   const [otpVerifying, setOtpVerifying] = useState(false)
-  const [otpMessage, setOtpMessage] = useState('')
+  const [otpError, setOtpError] = useState('')
 
-  // Image Crop Dialog State
+  // Avatar Crop Modal
   const [cropModal, setCropModal] = useState(false)
   const [rawImageSrc, setRawImageSrc] = useState<string | null>(null)
   const [zoomLevel, setZoomLevel] = useState(1)
@@ -43,10 +48,7 @@ export default function ProfilePage() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState('')
-  const [dark, setDark] = useState(true)
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [toastMsg, setToastMsg] = useState('')
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -64,18 +66,6 @@ export default function ProfilePage() {
       })
       .finally(() => setLoading(false))
   }, [])
-
-  function toggleTheme() {
-    const nextDark = !dark
-    setDark(nextDark)
-    if (nextDark) {
-      document.documentElement.classList.remove('light')
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-      document.documentElement.classList.add('light')
-    }
-  }
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -105,7 +95,6 @@ export default function ProfilePage() {
       const croppedUrl = canvas.toDataURL('image/jpeg', 0.9)
       setAvatarUrl(croppedUrl)
 
-      // Upload via API
       fetch('/api/profile/avatar', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -117,16 +106,14 @@ export default function ProfilePage() {
 
   async function handleSendEmailOtp() {
     if (!newEmail || newEmail.toLowerCase() === email.toLowerCase()) {
-      setMessage('Masukkan alamat email baru yang berbeda.')
+      setToastMsg('Masukkan alamat email baru yang berbeda.')
       return
     }
     setOtpSending(true)
-    setMessage('')
     try {
-      // Simulate/trigger sending OTP
       await new Promise((res) => setTimeout(res, 800))
       setOtpModal(true)
-      setOtpMessage('')
+      setOtpError('')
     } finally {
       setOtpSending(false)
     }
@@ -135,7 +122,6 @@ export default function ProfilePage() {
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    setMessage('')
     try {
       const res = await fetch('/api/profile', {
         method: 'POST',
@@ -148,13 +134,11 @@ export default function ProfilePage() {
           geminiApiKey: geminiApiKey || undefined,
         }),
       })
-      const data = await res.json()
-
       if (res.ok) {
-        setMessage('Profil dan konfigurasi berhasil diperbarui.')
-        setUser((prev) => prev ? { ...prev, name, twoFactorEnabled: twoFactor } : prev)
+        setToastMsg('Profil dan konfigurasi berhasil diperbarui.')
+        setUser((prev) => (prev ? { ...prev, name, twoFactorEnabled: twoFactor } : prev))
       } else {
-        setMessage(data.error || 'Gagal memperbarui profil.')
+        setToastMsg('Gagal memperbarui profil.')
       }
     } finally {
       setSaving(false)
@@ -164,11 +148,10 @@ export default function ProfilePage() {
   async function verifyEmailOtp(e: React.FormEvent) {
     e.preventDefault()
     if (otpCode.length < 4) {
-      setOtpMessage('Kode OTP minimal 4 digit.')
+      setOtpError('Kode OTP minimal 4 digit.')
       return
     }
     setOtpVerifying(true)
-    setOtpMessage('')
     try {
       const res = await fetch('/api/profile', {
         method: 'POST',
@@ -179,328 +162,219 @@ export default function ProfilePage() {
         setEmail(newEmail)
         setIsEditingEmail(false)
         setOtpModal(false)
-        setMessage('Email baru berhasil diverifikasi & diperbarui!')
+        setToastMsg('Email baru berhasil diverifikasi & diperbarui!')
       } else {
-        setOtpMessage('Gagal verifikasi email OTP.')
+        setOtpError('Gagal verifikasi OTP.')
       }
     } finally {
       setOtpVerifying(false)
     }
   }
 
-  async function logout() {
-    await fetch('/api/auth/me', { method: 'DELETE' })
-    window.location.href = '/login'
-  }
-
   if (loading) {
     return (
-      <main className="grid min-h-screen place-items-center bg-background text-foreground">
-        <PuzzleSpinner size="lg" />
-      </main>
+      <DashboardLayout user={user} activeTab="profile">
+        <div className="flex justify-center py-12">
+          <PuzzleSpinner size="lg" />
+        </div>
+      </DashboardLayout>
     )
   }
 
   return (
-    <main className="min-h-screen app-bg text-foreground">
-      <div className="dashboard-grid">
-        {mobileOpen && <button aria-label="Close navigation" className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
-        <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
-          <div className="sidebar-brand">
-            <Link href="/" className="brand-mark">›_</Link>
-            <Link href="/" className="brand-name">dann-tele<span>profile</span></Link>
-          </div>
-          <div className="workspace-switch flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="avatar">{(user?.name || 'D').slice(0, 1).toUpperCase()}</span>
-              <span>
-                <b>{user?.name || 'Workspace'}</b>
-                <small>{user?.email || 'Personal workspace'}</small>
-              </span>
-            </div>
-            <span className="rounded bg-primary/20 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
-              {user?.role || 'free'}
-            </span>
-          </div>
+    <DashboardLayout user={user} activeTab="profile">
+      <PageHeader
+        title="Profile Settings & Security"
+        subtitle="Manage full name, cropped avatar, email OTP verification, 2FA security PIN, and Gemini key."
+        icon={<User size={22} />}
+      />
 
-          <p className="nav-label">Navigation</p>
-          <nav className="side-nav">
-            <Link href="/dashboard"><LayoutDashboard size={17} /> Dashboard Overview</Link>
-            <Link href="/dashboard#bots"><Bot size={17} /> Bots Inventory</Link>
-            <Link href="/dashboard#commands"><Command size={17} /> Command Editor</Link>
-            <Link href="/dashboard#logs"><List size={17} /> Webhook Logs</Link>
-          </nav>
-
-          <p className="nav-label">Configure</p>
-          <nav className="side-nav">
-            <Link href="/settings"><Settings size={17} />Settings</Link>
-            <Link href="/profile" className="active"><User size={17} />Profile Settings</Link>
-          </nav>
-
-          <div className="sidebar-bottom">
-            <button onClick={logout} className="logout-button">
-              <LogOut size={16} /> Sign out
-            </button>
-          </div>
-        </aside>
-
-        <section className="main-column">
-          <header className="topbar">
-            <button className="menu-button" onClick={() => setMobileOpen(true)}><Menu size={20} /></button>
-            <div className="crumb">
-              <span>Workspace</span><b>/</b><strong>Profile</strong>
-            </div>
-            <div className="top-actions">
-              <button className="icon-button" aria-label="Toggle theme" onClick={toggleTheme}>
-                {dark ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
-
-              <div className="relative">
-                <button className="profile-chip" onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}>
-                  <span className="avatar small">{(user?.name || 'D').slice(0, 1).toUpperCase()}</span>
-                  <span className="profile-name">{user?.name || 'User'}</span>
-                  <ChevronDown size={15} />
-                </button>
-
-                {profileDropdownOpen && (
-                  <div className="absolute right-0 top-12 z-40 w-64 rounded-xl border border-border bg-card p-4 shadow-2xl text-foreground space-y-3">
-                    <div className="border-b border-border pb-3">
-                      <p className="font-bold text-sm truncate">{user?.name || 'Developer'}</p>
-                      <p className="text-xs text-muted-foreground truncate">{user?.email || 'email@example.com'}</p>
-                    </div>
-                    <div className="space-y-1 text-xs">
-                      <Link href="/profile" onClick={() => setProfileDropdownOpen(false)} className="flex items-center gap-2 p-2 rounded hover:bg-muted font-medium">
-                        <User size={14} /> Profile Settings ››
-                      </Link>
-                      <button onClick={logout} className="w-full text-left flex items-center gap-2 p-2 rounded hover:bg-destructive/10 text-destructive font-medium">
-                        <LogOut size={14} /> Logout / Sign Out
-                      </button>
-                    </div>
-                  </div>
+      <form onSubmit={handleSaveProfile} className="max-w-2xl space-y-6 text-xs">
+        <Card className="p-6 space-y-6">
+          <div className="flex items-center gap-4 border-b border-border pb-6">
+            <div className="relative group">
+              <div className="h-20 w-20 rounded-full border-2 border-primary bg-primary/20 flex items-center justify-center overflow-hidden text-2xl font-bold text-primary">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                ) : (
+                  (name || 'D').slice(0, 1).toUpperCase()
                 )}
               </div>
+              <label className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition cursor-pointer text-white">
+                <Camera size={20} />
+                <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+              </label>
             </div>
-          </header>
-
-          <div className="content-wrap max-w-3xl space-y-8">
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2"><User size={24} /> Edit Profile & Security</h1>
-              <p className="text-xs text-muted-foreground">Kelola nama, foto profil/avatar crop, verifikasi email OTP, kata sandi, dan 2FA PIN security.</p>
+              <h2 className="font-bold text-sm">Avatar & Profile Image</h2>
+              <p className="text-muted-foreground text-[11px]">Hover to upload image with crop preview dialog.</p>
             </div>
-
-            <form onSubmit={handleSaveProfile} className="space-y-6 rounded-2xl border border-border bg-card p-6 shadow-xl text-xs">
-              {/* Avatar Upload & Crop Section */}
-              <div className="flex items-center gap-4 border-b border-border pb-6">
-                <div className="relative group">
-                  <div className="h-20 w-20 rounded-full border-2 border-primary bg-primary/20 flex items-center justify-center overflow-hidden text-2xl font-bold text-primary">
-                    {avatarUrl ? (
-                      <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
-                    ) : (
-                      (name || 'D').slice(0, 1).toUpperCase()
-                    )}
-                  </div>
-                  <label className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition cursor-pointer text-white">
-                    <Camera size={20} />
-                    <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
-                  </label>
-                </div>
-                <div>
-                  <h2 className="font-bold text-sm">Avatar & Profile Image</h2>
-                  <p className="text-muted-foreground text-[11px]">Klik gambar avatar untuk mengunggah foto baru & penyesuaian crop.</p>
-                </div>
-              </div>
-
-              {/* General Profile Fields */}
-              <div className="space-y-4">
-                <h2 className="font-bold text-sm text-primary flex items-center gap-2"><User size={16} /> Data Pengguna</h2>
-                <label className="block font-semibold">Nama Lengkap
-                  <input value={name} onChange={(e) => setName(e.target.value)} required className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
-                </label>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-xs flex items-center gap-1.5"><Mail size={14} /> Alamat Email</span>
-                    {!isEditingEmail ? (
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingEmail(true)}
-                        className="inline-flex items-center gap-1 text-primary hover:underline font-bold text-xs"
-                      >
-                        <Edit3 size={13} /> Edit Email
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingEmail(false)}
-                        className="text-muted-foreground hover:underline text-xs"
-                      >
-                        Batal
-                      </button>
-                    )}
-                  </div>
-
-                  {!isEditingEmail ? (
-                    <input value={email} disabled className="w-full rounded-lg border border-input bg-muted p-2.5 opacity-80 font-mono" />
-                  ) : (
-                    <div className="space-y-3 p-3 border border-border rounded-xl bg-muted/20">
-                      <label className="block font-semibold">Email Baru Target
-                        <input
-                          type="email"
-                          value={newEmail}
-                          onChange={(e) => setNewEmail(e.target.value)}
-                          placeholder="email-baru@example.com"
-                          className="mt-1 w-full rounded-lg border border-input bg-background p-2.5"
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleSendEmailOtp}
-                        disabled={otpSending}
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-                      >
-                        {otpSending ? <PuzzleSpinner size="sm" /> : <><Mail size={14} /> Kirim OTP Verifikasi →</>}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Gemini API Key Configuration Section */}
-                <div className="space-y-2 pt-2">
-                  <label className="block font-semibold text-primary flex items-center gap-2">
-                    <Sparkles size={16} /> Google Gemini API Key (Module @google/genai)
-                  </label>
-                  <input
-                    type="password"
-                    value={geminiApiKey}
-                    onChange={(e) => setGeminiApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full rounded-lg border border-input bg-background p-2.5 font-mono"
-                  />
-                  <p className="text-[11px] text-muted-foreground">Input API Key Google Gemini Anda di sini untuk mengaktifkan AI response otomatis pada bot command.</p>
-                </div>
-              </div>
-
-              {/* Password & 2FA */}
-              <div className="space-y-4 border-t border-border pt-6">
-                <h2 className="font-bold text-sm text-primary flex items-center gap-2"><Key size={16} /> Keamanan & Authentikasi 2FA</h2>
-                <label className="block font-semibold">Ubah Kata Sandi (Kosongkan jika tidak ingin diubah)
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} placeholder="••••••••" className="mt-1 w-full rounded-lg border border-input bg-background p-2.5" />
-                </label>
-
-                <div className="space-y-3 rounded-lg border border-border p-3 bg-muted/20">
-                  <label className="flex items-center gap-3">
-                    <input type="checkbox" checked={twoFactor} onChange={(e) => setTwoFactor(e.target.checked)} />
-                    <span className="font-semibold">Aktifkan Authentikasi 2 Factor (2FA PIN Security)</span>
-                  </label>
-
-                  {twoFactor && (
-                    <div className="pt-2">
-                      <label className="block font-semibold">Set 2FA Security PIN (4 - 6 Digit)
-                        <input
-                          type="password"
-                          maxLength={6}
-                          value={twoFactorPin}
-                          onChange={(e) => setTwoFactorPin(e.target.value)}
-                          placeholder="••••"
-                          className="mt-1 w-full rounded-lg border border-input bg-background p-2.5 font-mono text-center tracking-widest text-lg"
-                        />
-                      </label>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t border-border pt-6 flex items-center justify-between">
-                <a href="/api/db/export" download className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-xs font-semibold hover:bg-muted">
-                  <Download size={14} /> Export Data Profil JSON
-                </a>
-                <button type="submit" disabled={saving} className="primary-button">
-                  {saving ? <PuzzleSpinner size="sm" /> : 'Simpan Profil →'}
-                </button>
-              </div>
-
-              {message && <p className="text-center font-bold text-primary">{message}</p>}
-            </form>
           </div>
-        </section>
-      </div>
 
-      {/* Image Crop Preview Dialog Modal */}
-      {cropModal && rawImageSrc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl text-foreground space-y-4 text-xs">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="font-bold text-sm flex items-center gap-2"><Camera size={16} /> Dialog Crop Preview Avatar</h2>
-              <button onClick={() => setCropModal(false)} className="text-muted-foreground hover:text-foreground">✕</button>
+          <div className="space-y-4">
+            <Input label="Full Name" value={name} onChange={(e) => setName(e.target.value)} required />
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-xs text-muted-foreground uppercase">Email Address</span>
+                {!isEditingEmail ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingEmail(true)}
+                    className="inline-flex items-center gap-1 text-primary hover:underline font-bold text-xs"
+                  >
+                    <Edit3 size={13} /> Edit Email
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => setIsEditingEmail(false)} className="text-muted-foreground hover:underline">
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              {!isEditingEmail ? (
+                <input value={email} disabled className="w-full rounded-xl border border-input bg-muted p-2.5 opacity-80 font-mono" />
+              ) : (
+                <div className="space-y-3 p-3 border border-border rounded-xl bg-muted/20">
+                  <Input
+                    label="New Target Email"
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="new@example.com"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendEmailOtp}
+                    disabled={otpSending}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                  >
+                    {otpSending ? <PuzzleSpinner size="sm" /> : <><Mail size={14} /> Send OTP Verification →</>}
+                  </button>
+                </div>
+              )}
             </div>
-            <p className="text-muted-foreground">Sesuaikan posisi dan pratinjau foto profil sebelum disimpan.</p>
 
-            <div className="relative mx-auto h-56 w-56 overflow-hidden rounded-full border-4 border-primary bg-black/50 flex items-center justify-center">
+            <div className="space-y-2 pt-2">
+              <label className="block font-semibold text-primary flex items-center gap-2">
+                <Sparkles size={16} /> Google Gemini API Key
+              </label>
+              <Input
+                type="password"
+                value={geminiApiKey}
+                onChange={(e) => setGeminiApiKey(e.target.value)}
+                placeholder="AIzaSy..."
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4 border-t border-border pt-6">
+            <h2 className="font-bold text-sm text-primary flex items-center gap-2">
+              <Key size={16} /> Authentication & 2FA Security
+            </h2>
+            <Input
+              label="Change Password (Optional)"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={8}
+              placeholder="••••••••"
+            />
+
+            <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-3">
+              <Switch
+                label="Enable 2-Factor Authentication (2FA PIN)"
+                description="Prompts for security PIN upon accessing dashboard."
+                checked={twoFactor}
+                onChange={setTwoFactor}
+              />
+
+              {twoFactor && (
+                <Input
+                  label="Set 2FA Security PIN (4 - 6 Digits)"
+                  type="password"
+                  maxLength={6}
+                  value={twoFactorPin}
+                  onChange={(e) => setTwoFactorPin(e.target.value)}
+                  placeholder="••••"
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-border pt-6 flex items-center justify-between">
+            <a href="/api/db/export" download className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-xs font-semibold hover:bg-muted">
+              <Download size={14} /> Export Profile Data JSON
+            </a>
+            <button type="submit" disabled={saving} className="primary-button">
+              {saving ? <PuzzleSpinner size="sm" /> : 'Save Profile →'}
+            </button>
+          </div>
+        </Card>
+      </form>
+
+      {/* Avatar Crop Preview Modal */}
+      <Modal open={cropModal} onClose={() => setCropModal(false)} title="Avatar Crop Preview" maxWidth="sm">
+        <div className="space-y-4 text-xs text-center">
+          <div className="relative mx-auto h-48 w-48 overflow-hidden rounded-full border-4 border-primary bg-black/50 flex items-center justify-center">
+            {rawImageSrc && (
               <img
                 ref={imgRef}
                 src={rawImageSrc}
-                alt="Crop preview"
+                alt="Preview"
                 className="h-full w-full object-cover"
                 style={{ transform: `scale(${zoomLevel})` }}
               />
-            </div>
-
-            <div className="space-y-1">
-              <label className="font-semibold text-[11px] block text-center">Zoom Adjust</label>
-              <input
-                type="range"
-                min="1"
-                max="2.5"
-                step="0.1"
-                value={zoomLevel}
-                onChange={(e) => setZoomLevel(Number(e.target.value))}
-                className="w-full"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setCropModal(false)} className="flex-1 rounded-lg border border-border py-2 font-semibold">
-                Batal
-              </button>
-              <button type="button" onClick={applyCrop} className="flex-1 primary-button">
-                Simpan & Potong Foto →
-              </button>
-            </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-muted-foreground mb-1">Zoom Adjust</label>
+            <input
+              type="range"
+              min="1"
+              max="2.5"
+              step="0.1"
+              value={zoomLevel}
+              onChange={(e) => setZoomLevel(Number(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setCropModal(false)} className="flex-1 rounded-xl border border-border py-2 font-semibold">
+              Cancel
+            </button>
+            <button type="button" onClick={applyCrop} className="flex-1 primary-button">
+              Apply & Save →
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
 
-      {/* OTP Verification Modal */}
-      {otpModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl text-center text-foreground space-y-4 text-xs">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary">
-              <ShieldCheck size={24} />
-            </div>
-            <h2 className="text-lg font-bold">Verifikasi OTP Email Baru</h2>
-            <p className="text-muted-foreground">Kode OTP verifikasi telah dikirim ke alamat email <b>{newEmail}</b>.</p>
-            <form onSubmit={verifyEmailOtp} className="space-y-3">
-              <input
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value)}
-                maxLength={6}
-                placeholder="1 2 3 4 5 6"
-                required
-                className="w-full rounded-xl border border-input bg-background p-3 text-center text-xl font-mono tracking-widest"
-              />
-              {otpMessage && <p className="text-destructive font-semibold">{otpMessage}</p>}
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setOtpModal(false)} className="flex-1 rounded-xl border border-border py-2.5 font-semibold">
-                  Batal
-                </button>
-                <button type="submit" disabled={otpVerifying} className="flex-1 primary-button">
-                  {otpVerifying ? <PuzzleSpinner size="sm" /> : 'Verifikasi OTP →'}
-                </button>
-              </div>
-            </form>
+      {/* OTP Modal */}
+      <Modal open={otpModal} onClose={() => setOtpModal(false)} title="Verify Email OTP" maxWidth="sm">
+        <form onSubmit={verifyEmailOtp} className="space-y-4 text-xs text-center">
+          <p className="text-muted-foreground">OTP code sent to <b>{newEmail}</b>.</p>
+          <input
+            value={otpCode}
+            onChange={(e) => setOtpCode(e.target.value)}
+            maxLength={6}
+            placeholder="1 2 3 4 5 6"
+            required
+            className="w-full rounded-xl border border-input bg-background p-3 text-center text-xl font-mono tracking-widest"
+          />
+          {otpError && <p className="text-destructive font-semibold">{otpError}</p>}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setOtpModal(false)} className="flex-1 rounded-xl border border-border py-2.5 font-semibold">
+              Cancel
+            </button>
+            <button type="submit" disabled={otpVerifying} className="flex-1 primary-button">
+              {otpVerifying ? <PuzzleSpinner size="sm" /> : 'Verify OTP →'}
+            </button>
           </div>
-        </div>
-      )}
-    </main>
+        </form>
+      </Modal>
+
+      <Toast open={Boolean(toastMsg)} message={toastMsg} onClose={() => setToastMsg('')} type="success" />
+    </DashboardLayout>
   )
 }
