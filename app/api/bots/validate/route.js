@@ -2,12 +2,7 @@ import { NextResponse } from 'next/server'
 import { ObjectId } from 'mongodb'
 import { getDb, publicBot } from '../../../../lib/mongodb'
 import { getCurrentUser } from '../../../../lib/auth'
-
-function getAppBaseUrl(request) {
-  const host = request.headers.get('host') || 'localhost:3000'
-  const proto = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https')
-  return `${proto}://${host}`
-}
+import { getBaseUrl } from '../../../../lib/config'
 
 export async function POST(request) {
   const user = await getCurrentUser()
@@ -31,7 +26,7 @@ export async function POST(request) {
     }
 
     const username = payload.result.username
-    const baseUrl = getAppBaseUrl(request)
+    const baseUrl = getBaseUrl()
     const webhookUrl = `${baseUrl}/api/telegram/webhook/${bot._id.toString()}`
 
     // Re-register Webhook

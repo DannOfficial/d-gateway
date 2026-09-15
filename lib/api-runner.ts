@@ -7,17 +7,32 @@ export function redactSensitiveData(input: string): string {
     .replace(/(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[REDACTED]')
 }
 
+function getNestedProperty(obj: any, pathStr: string): any {
+  if (!obj || !pathStr) return undefined
+  const cleanPath = pathStr.replace(/\[(\d+)\]/g, '.$1')
+  const parts = cleanPath.split('.')
+  let current = obj
+  for (const p of parts) {
+    if (!p) continue
+    if (current === null || current === undefined) return undefined
+    current = current[p]
+  }
+  return current
+}
+
 export async function executeExternalApiCommand(
   db: any,
   bot: any,
   command: any,
   queryParam: string,
   senderUsername: string
-): Promise<string> {
+): Promise<{ text: string; dynamicImageUrl?: string }> {
   const rawUrl = command.apiEndpoint || command.scrapeUrl
-  if (!rawUrl) return '⚠️ No API endpoint configured for this command.'
+  if (!rawUrl) return { text: '⚠️ No API endpoint configured for this command.' }
 
-  const filledUrl = rawUrl.replace(/\{query\}/g, encodeURIComponent(queryParam || 'kucing')).replace(/@query/g, encodeURIComponent(queryParam || 'kucing'))
+  const filledUrl = rawUrl
+    .replace(/\{query\}/g, encodeURIComponent(queryParam || 'kucing'))
+    .replace(/@query/g, encodeURIComponent(queryParam || 'kucing'))
 
   const ssrf = await validateUrlForSsrf(filledUrl)
   if (!ssrf.safe) {
@@ -31,7 +46,7 @@ export async function executeExternalApiCommand(
       error: ssrf.reason,
       createdAt: new Date(),
     })
-    return `⚠️ <b>SSRF Security Blocked:</b> Target API endpoint is not allowed (${ssrf.reason})`
+    return { text: `⚠️ <b>SSRF Security Blocked:</b> Target API endpoint is not allowed (${ssrf.reason})` }
   }
 
   const startTime = Date.now()
@@ -73,29 +88,62 @@ export async function executeExternalApiCommand(
       method: command.apiMethod || 'GET',
       statusCode: res.status,
       latency,
+      contentType,
       status: res.ok ? 'SUCCESS' : 'FAILED',
       createdAt: new Date(),
     })
 
     if (!res.ok) {
-      return `⚠️ <b>API Error (HTTP ${res.status}):</b> ${res.statusText || 'External API returned error'}`
+      return { text: `⚠️ <b>API Error (HTTP ${res.status}):</b> ${res.statusText || 'External API returned error'}` }
+    }
+
+    let dynamicImageUrl: string | undefined = undefined
+    if (jsonResult) {
+      // Find dynamic image URL in jsonResult
+      const candidates = [
+        getNestedProperty(jsonResult, 'image'),
+        getNestedProperty(jsonResult, 'photo'),
+        getNestedProperty(jsonResult, 'url'),
+        getNestedProperty(jsonResult, 'data.image'),
+        getNestedProperty(jsonResult, 'data.photo'),
+        getNestedProperty(jsonResult, 'data.url'),
+        getNestedProperty(jsonResult, 'data[0].image'),
+        getNestedProperty(jsonResult, 'data[0].photo'),
+        getNestedProperty(jsonResult, 'data[0].url'),
+        getNestedProperty(jsonResult, 'result[0].image'),
+        getNestedProperty(jsonResult, 'result[0].url'),
+      ]
+      dynamicImageUrl = candidates.find((c) => typeof c === 'string' && /^https?:\/\//i.test(c))
     }
 
     if (command.response) {
       let output = command.response
-      if (jsonResult && typeof jsonResult === 'object') {
-        output = output.replace(/\{result\}/g, typeof jsonResult.data === 'string' ? jsonResult.data : JSON.stringify(jsonResult, null, 2))
-      } else {
-        output = output.replace(/\{result\}/g, bodyText.slice(0, 1000))
-      }
-      return output
+
+      // Replace placeholders like {result.title} or {data[0].image}
+      output = output.replace(/\{([a-zA-Z0-9_.[\]]+)\}/g, (match, path) => {
+        if (path === 'result') {
+          return typeof jsonResult?.data === 'string'
+            ? jsonResult.data
+            : JSON.stringify(jsonResult, null, 2)
+        }
+        const val = getNestedProperty(jsonResult, path)
+        if (val !== undefined && val !== null) {
+          return typeof val === 'object' ? JSON.stringify(val) : String(val)
+        }
+        return match
+      })
+
+      return { text: output, dynamicImageUrl }
     }
 
     if (jsonResult) {
-      return `✨ <b>[API Response]</b>\n<pre>${JSON.stringify(jsonResult, null, 2).slice(0, 3500)}</pre>`
+      return {
+        text: `✨ <b>[API Response]</b>\n<pre>${JSON.stringify(jsonResult, null, 2).slice(0, 3500)}</pre>`,
+        dynamicImageUrl,
+      }
     }
 
-    return `✨ <b>[API Response]</b>\n${bodyText.slice(0, 2000)}`
+    return { text: `✨ <b>[API Response]</b>\n${bodyText.slice(0, 2000)}` }
   } catch (err: any) {
     clearTimeout(timeout)
     const latency = Date.now() - startTime
@@ -113,6 +161,6 @@ export async function executeExternalApiCommand(
       createdAt: new Date(),
     })
 
-    return `⚠️ <b>API Execution Failed:</b> ${err.message || 'Timeout / Network Error'}`
+    return { text: `⚠️ <b>API Execution Failed:</b> ${err.message || 'Timeout / Network Error'}` }
   }
 }

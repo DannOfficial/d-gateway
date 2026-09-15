@@ -2,12 +2,7 @@ import { NextResponse } from 'next/server'
 import { ObjectId } from 'mongodb'
 import { getDb, publicBot } from '@/lib/mongodb'
 import { getCurrentUser } from '@/lib/auth'
-
-function getAppBaseUrl(request: Request) {
-  const host = request.headers.get('host') || 'localhost:3000'
-  const proto = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https')
-  return `${proto}://${host}`
-}
+import { getBaseUrl } from '@/lib/config'
 
 export async function POST(request: Request, { params }: { params: Promise<{ botId: string }> }) {
   const user = await getCurrentUser()
@@ -31,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bot
     return NextResponse.json({ ok: false, error: 'Forbidden: You do not own this bot' }, { status: 403 })
   }
 
-  const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL || getAppBaseUrl(request)
+  const appBaseUrl = getBaseUrl()
   const webhookUrl = `${appBaseUrl}/api/telegram/webhook/${bot._id.toString()}`
 
   try {
